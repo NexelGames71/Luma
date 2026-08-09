@@ -1,0 +1,34 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "msvc-base",
+      "hidden": true,
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl"
+      },
+      "vendor": {
+        "note": "Run from a Developer PowerShell (or via Scripts/*.ps1) so cl.exe and the MSVC environment are active."
+      }
+    },
+    {
+      "name": "msvc",
+      "displayName": "MSVC (Ninja Multi-Config: Debug/Development/Release/Shipping)",
+      "inherits": "msvc-base"
+    }
+  ],
+  "buildPresets": [
+    { "name": "msvc-debug",       "configurePreset": "msvc", "configuration": "Debug" },
+    { "name": "msvc-dev",         "configurePreset": "msvc", "configuration": "Development" },
+    { "name": "msvc-release",     "configurePreset": "msvc", "configuration": "Release" },
+    { "name": "msvc-shipping",    "configurePreset": "msvc", "configuration": "Shipping" }
+  ],
+  "testPresets": [
+    { "name": "msvc-debug",   "configurePreset": "msvc", "configuration": "Debug",       "output": { "outputOnFailure": true } },
+    { "name": "msvc-dev",     "configurePreset": "msvc", "configuration": "Development",  "output": { "outputOnFailure": true } },
+    { "name": "msvc-release", "configurePreset": "msvc", "configuration": "Release",      "output": { "outputOnFailure": true } }
+  ]
+}
