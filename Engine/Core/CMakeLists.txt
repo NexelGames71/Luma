@@ -2,7 +2,8 @@
 
 # Sources are added task-by-task as the module comes online.
 add_library(LumaCore STATIC
-    src/Version.cpp)
+    src/Version.cpp
+    src/Assert.cpp)
 
 add_library(Luma::Core ALIAS LumaCore)
 
