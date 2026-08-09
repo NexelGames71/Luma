@@ -6,9 +6,36 @@ add_library(LumaRenderVulkan STATIC
     src/Vulkan/VulkanInstance.cpp
     src/Vulkan/VulkanDevice.cpp
     src/Vulkan/VulkanSwapchain.cpp
+    src/Vulkan/VulkanShader.cpp
+    src/Vulkan/VulkanPipeline.cpp
     src/Vulkan/VulkanRenderer.cpp)
 
 add_library(Luma::RenderVulkan ALIAS LumaRenderVulkan)
+
+# --- Shader compilation: GLSL -> SPIR-V via glslc -------------------------
+set(_luma_shader_src ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
+set(_luma_shader_out ${CMAKE_BINARY_DIR}/shaders)
+file(MAKE_DIRECTORY ${_luma_shader_out})
+
+if(NOT Vulkan_GLSLC_EXECUTABLE)
+    message(FATAL_ERROR "Luma: glslc not found (needed to compile shaders)")
+endif()
+
+set(_luma_spv_outputs)
+foreach(shader triangle.vert triangle.frag)
+    add_custom_command(
+        OUTPUT ${_luma_shader_out}/${shader}.spv
+        COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3
+                ${_luma_shader_src}/${shader}
+                -o ${_luma_shader_out}/${shader}.spv
+        DEPENDS ${_luma_shader_src}/${shader}
+        COMMENT "glslc ${shader}"
+        VERBATIM)
+    list(APPEND _luma_spv_outputs ${_luma_shader_out}/${shader}.spv)
+endforeach()
+
+add_custom_target(LumaShaders DEPENDS ${_luma_spv_outputs})
+add_dependencies(LumaRenderVulkan LumaShaders)
 
 target_include_directories(LumaRenderVulkan
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -29,5 +56,8 @@ if(_luma_vk_layer_dir)
     target_compile_definitions(LumaRenderVulkan PRIVATE
         LUMA_VULKAN_LAYER_PATH="${_luma_vk_layer_dir}")
 endif()
+
+target_compile_definitions(LumaRenderVulkan PRIVATE
+    LUMA_SHADER_DIR="${_luma_shader_out}")
 
 set_target_properties(LumaRenderVulkan PROPERTIES FOLDER "Engine")

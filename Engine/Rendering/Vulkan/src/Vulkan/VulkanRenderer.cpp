@@ -61,6 +61,13 @@ VulkanRenderer::VulkanRenderer(Window& window, const RendererConfig& config)
     CreateFrameSync();
     CreateRenderFinishedSemaphores();
 
+#if defined(LUMA_SHADER_DIR)
+    const std::string shaderDir = LUMA_SHADER_DIR;
+    m_trianglePipeline = std::make_unique<VulkanPipeline>(
+        m_device->Logical(), m_swapchain->Format(),
+        shaderDir + "/triangle.vert.spv", shaderDir + "/triangle.frag.spv");
+#endif
+
     LUMA_LOG_INFO("Vulkan", "renderer ready");
 }
 
@@ -68,6 +75,7 @@ VulkanRenderer::~VulkanRenderer() {
     if (m_device) vkDeviceWaitIdle(m_device->Logical());
     VkDevice device = m_device ? m_device->Logical() : VK_NULL_HANDLE;
 
+    m_trianglePipeline.reset();  // uses the device; destroy before it
     DestroyRenderFinishedSemaphores();
     for (auto& sem : m_imageAvailable) {
         if (sem) vkDestroySemaphore(device, sem, nullptr);
@@ -213,7 +221,26 @@ bool VulkanRenderer::BeginFrame() {
     rendering.pColorAttachments = &colorAttachment;
 
     vkCmdBeginRendering(cmd, &rendering);
-    // Geometry drawing arrives in Milestone 3; for now this just clears.
+    if (m_trianglePipeline) {
+        VkExtent2D extent = m_swapchain->Extent();
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<f32>(extent.width);
+        viewport.height = static_cast<f32>(extent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = extent;
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          m_trianglePipeline->Handle());
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+    }
     vkCmdEndRendering(cmd);
 
     TransitionImage(cmd, image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
