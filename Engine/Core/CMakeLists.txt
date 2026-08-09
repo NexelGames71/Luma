@@ -4,7 +4,8 @@
 add_library(LumaCore STATIC
     src/Version.cpp
     src/Assert.cpp
-    src/Log.cpp)
+    src/Log.cpp
+    src/Config.cpp)
 
 add_library(Luma::Core ALIAS LumaCore)
 
