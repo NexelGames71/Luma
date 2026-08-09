@@ -103,7 +103,8 @@ public:
         if (!m_stream.is_open()) return;
         m_stream << '[' << FormatTime(record.time) << "] " << ToString(record.level)
                  << ' ' << record.category << ": " << record.message << '\n';
-        if (record.level >= LogLevel::Error) m_stream.flush();
+        // Flush each record so logs survive a crash or forced termination.
+        m_stream.flush();
     }
 
     void Flush() override {
