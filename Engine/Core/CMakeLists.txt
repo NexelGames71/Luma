@@ -7,7 +7,8 @@ add_library(LumaCore STATIC
     src/Log.cpp
     src/Config.cpp
     src/Event.cpp
-    src/LayerStack.cpp)
+    src/LayerStack.cpp
+    src/Application.cpp)
 
 add_library(Luma::Core ALIAS LumaCore)
 

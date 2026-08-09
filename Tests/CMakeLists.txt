@@ -7,7 +7,8 @@ add_executable(LumaTests
     Core/LogTests.cpp
     Core/ConfigTests.cpp
     Core/EventTests.cpp
-    Core/LayerStackTests.cpp)
+    Core/LayerStackTests.cpp
+    Core/ApplicationTests.cpp)
 
 target_link_libraries(LumaTests PRIVATE Luma::Core Catch2::Catch2WithMain)
 
