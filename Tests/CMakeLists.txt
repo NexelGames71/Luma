@@ -5,7 +5,8 @@ luma_require_catch2()
 add_executable(LumaTests
     Core/AssertTests.cpp
     Core/LogTests.cpp
-    Core/ConfigTests.cpp)
+    Core/ConfigTests.cpp
+    Core/EventTests.cpp)
 
 target_link_libraries(LumaTests PRIVATE Luma::Core Catch2::Catch2WithMain)
 
