@@ -4,9 +4,10 @@ A production-grade 3D game engine built on Vulkan, targeting Windows x64 first.
 Luma is being built incrementally, milestone by milestone, keeping the repository
 buildable and tested at every step.
 
-> **Status:** Milestones 0–1 complete — build infrastructure, the `Luma::Core`
-> foundation, a GLFW-backed platform window, and a running application loop.
-> The Vulkan renderer (Milestone 2) is next. See
+> **Status:** Milestones 0–2 complete — build infrastructure, the `Luma::Core`
+> foundation, a GLFW-backed platform window, a running application loop, and a
+> Vulkan 1.3 renderer that clears and presents the swapchain (validation-clean).
+> Rendering core / mesh drawing (Milestone 3) is next. See
 > [Docs/Architecture/Foundation.md](Docs/Architecture/Foundation.md) and the
 > [roadmap](#roadmap).
 
@@ -50,7 +51,9 @@ as errors), **Release**, **Shipping** (asserts/verbose logs compiled out).
 ```
 Engine/Core/       Luma::Core   - types, assert, log, config, events, layers, app loop
 Engine/Platform/   Luma::Platform - Window interface + GLFW backend (GLFW hidden)
-Runtime/Sandbox/   LumaEngine.exe - runtime host that opens the window
+Engine/Rendering/RHI/    Luma::RHI - abstract Renderer interface (header-only)
+Engine/Rendering/Vulkan/ Luma::RenderVulkan - Vulkan 1.3 backend (Vulkan hidden)
+Runtime/Sandbox/   LumaEngine.exe - runtime host: window + renderer + loop
 Tests/             Catch2 tests (run via ctest)
 cmake/             compiler flags + dependency helpers
 Config/            default Engine.ini
@@ -66,8 +69,8 @@ docs/superpowers/  design spec + implementation plan
 
 - [x] **M0** Repo, CMake, configs, Vulkan detection, logging, asserts, config, tests
 - [x] **M1** Platform window, events, input foundation, application loop
-- [ ] **M2** Vulkan foundation (instance → swapchain → clear screen)
-- [ ] **M3** Rendering core (RHI, buffers, textures, shaders, pipelines, mesh)
+- [x] **M2** Vulkan foundation (instance/validation → device → swapchain → clear/present)
+- [ ] **M3** Rendering core (buffers, textures, shaders, pipelines, mesh drawing)
 - [ ] **M4** Scene system (world/entity/components, serialization)
 - [ ] **M5** Luma Slate UI framework
 - [ ] **M6** Luma Editor
