@@ -6,10 +6,13 @@
 #include "Luma/Core/Application.h"
 #include "Luma/Core/Config.h"
 #include "Luma/Core/EngineLoop.h"
+#include "Luma/Core/Events.h"
 #include "Luma/Core/Log.h"
 #include "Luma/Core/Types.h"
 #include "Luma/Core/Version.h"
 #include "Luma/Platform/Window.h"
+#include "Luma/RHI/Renderer.h"
+#include "Luma/RHI/VulkanRenderer.h"
 
 #include "SandboxLayer.h"
 
@@ -59,7 +62,24 @@ int main() {
     props.height = spec.height;
 
     std::unique_ptr<Window> window = Window::Create(props);
-    window->SetEventCallback([&app](Event& e) { app.OnEvent(e); });
+
+    RendererConfig rendererConfig;
+    rendererConfig.appName = spec.name;
+    rendererConfig.enableValidation = true;
+    rendererConfig.vsync = cfg.GetBool("Window.vsync", true);
+    std::unique_ptr<Renderer> renderer =
+        CreateVulkanRenderer(*window, rendererConfig);
+    renderer->SetClearColor(ClearColor{0.10f, 0.12f, 0.16f, 1.0f});
+
+    // Route events to the app, and feed resizes to the renderer.
+    window->SetEventCallback([&app, &renderer](Event& e) {
+        app.OnEvent(e);
+        EventDispatcher dispatcher(e);
+        dispatcher.Dispatch<WindowResizeEvent>([&renderer](WindowResizeEvent& r) {
+            renderer->OnResize(r.Width(), r.Height());
+            return false;
+        });
+    });
 
     app.PushLayer(std::make_unique<SandboxLayer>());
 
@@ -72,7 +92,11 @@ int main() {
 
         Timestep dt = clock.Tick();
         app.RunOneFrame(dt);
-        // TODO(M2): render world -> UI -> present. No renderer yet.
+
+        if (renderer->BeginFrame()) {
+            // Milestone 2: clear only. Geometry/UI recording lands in M3+.
+            renderer->EndFrame();
+        }
 
         fpsAccum += dt.Seconds();
         ++frames;
@@ -88,6 +112,8 @@ int main() {
     }
 
     LUMA_LOG_INFO("Boot", "main loop exited; shutting down");
+    renderer->WaitIdle();
+    renderer.reset();
     window.reset();
     Log::Shutdown();
     return 0;
