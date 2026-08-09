@@ -6,7 +6,8 @@ add_library(LumaCore STATIC
     src/Assert.cpp
     src/Log.cpp
     src/Config.cpp
-    src/Event.cpp)
+    src/Event.cpp
+    src/LayerStack.cpp)
 
 add_library(Luma::Core ALIAS LumaCore)
 
