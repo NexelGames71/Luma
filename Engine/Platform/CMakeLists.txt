@@ -11,9 +11,10 @@ target_include_directories(LumaPlatform
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# glfw is PRIVATE: no GLFW symbols or headers escape Luma::Platform.
+# glfw + Vulkan are PRIVATE: no GLFW/Vulkan symbols or headers escape the module.
+# Vulkan is used only for glfwCreateWindowSurface in GlfwWindow.cpp.
 target_link_libraries(LumaPlatform
     PUBLIC Luma::Core
-    PRIVATE glfw)
+    PRIVATE glfw Vulkan::Vulkan)
 
 set_target_properties(LumaPlatform PROPERTIES FOLDER "Engine")

@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "Luma/Core/Event.h"
 #include "Luma/Core/Types.h"
@@ -34,8 +35,20 @@ public:
     virtual u32 Width() const = 0;
     virtual u32 Height() const = 0;
 
-    // Native OS handle (HWND on Windows) for interop; nullptr if unavailable.
+    // Native OS handle (GLFWwindow* today) for interop; nullptr if unavailable.
     virtual void* NativeHandle() const = 0;
+
+    // --- Vulkan surface seam ------------------------------------------------
+    // Vulkan types are passed as opaque handles (void*) so no Vulkan header is
+    // required by consumers of this interface.
+
+    // Instance extensions the windowing system needs (e.g. VK_KHR_surface).
+    virtual std::vector<const char*> RequiredVulkanInstanceExtensions() const = 0;
+
+    // Creates a VkSurfaceKHR for the given VkInstance. `instance` is a VkInstance
+    // and the return value is a VkSurfaceKHR, both cast through void*; returns
+    // nullptr on failure.
+    virtual void* CreateVulkanSurface(void* instance) const = 0;
 
     // Creates the platform's default window implementation.
     static std::unique_ptr<Window> Create(const WindowProps& props = {});

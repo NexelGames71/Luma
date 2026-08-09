@@ -26,6 +26,9 @@ public:
     u32 Height() const override { return m_data.height; }
     void* NativeHandle() const override;
 
+    std::vector<const char*> RequiredVulkanInstanceExtensions() const override;
+    void* CreateVulkanSurface(void* instance) const override;
+
     // Stored behind the GLFW user pointer so static callbacks can reach it.
     // Public because the (file-local) GLFW callbacks retrieve it via the user
     // pointer; it carries no invariants worth hiding.

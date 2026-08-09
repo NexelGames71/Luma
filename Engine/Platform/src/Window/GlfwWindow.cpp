@@ -1,5 +1,8 @@
 #include "GlfwWindow.h"
 
+// Pull in Vulkan types via GLFW so surface creation is available. This keeps the
+// only Vulkan dependency of Luma::Platform confined to this translation unit.
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include "Luma/Core/Assert.h"
@@ -157,5 +160,24 @@ bool GlfwWindow::ShouldClose() const {
 }
 
 void* GlfwWindow::NativeHandle() const { return m_window; }
+
+std::vector<const char*> GlfwWindow::RequiredVulkanInstanceExtensions() const {
+    u32 count = 0;
+    const char** extensions = glfwGetRequiredInstanceExtensions(&count);
+    if (!extensions) return {};
+    return std::vector<const char*>(extensions, extensions + count);
+}
+
+void* GlfwWindow::CreateVulkanSurface(void* instance) const {
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    VkResult result = glfwCreateWindowSurface(
+        reinterpret_cast<VkInstance>(instance), m_window, nullptr, &surface);
+    if (result != VK_SUCCESS) {
+        LUMA_LOG_ERROR("Window", "glfwCreateWindowSurface failed ({})",
+                       static_cast<int>(result));
+        return nullptr;
+    }
+    return reinterpret_cast<void*>(surface);
+}
 
 }  // namespace Luma
