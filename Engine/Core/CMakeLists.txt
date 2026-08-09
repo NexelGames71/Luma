@@ -1,14 +1,14 @@
 # Luma::Core - foundational module. Depends only on the C++ standard library.
 
-# Sources are added task-by-task as the module comes online.
+# Sources grouped by subsystem under src/<Subsystem>/.
 add_library(LumaCore STATIC
-    src/Version.cpp
-    src/Assert.cpp
-    src/Log.cpp
-    src/Config.cpp
-    src/Event.cpp
-    src/LayerStack.cpp
-    src/Application.cpp)
+    src/Foundation/Version.cpp
+    src/Foundation/Assert.cpp
+    src/Log/Log.cpp
+    src/Config/Config.cpp
+    src/Event/Event.cpp
+    src/Layer/LayerStack.cpp
+    src/Application/Application.cpp)
 
 add_library(Luma::Core ALIAS LumaCore)
 

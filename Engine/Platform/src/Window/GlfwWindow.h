@@ -1,0 +1,46 @@
+#pragma once
+
+#include <string>
+
+#include "Luma/Platform/Window.h"
+
+// Forward declaration only — the GLFW header is included solely in the .cpp so
+// no GLFW type leaks into any public (or engine-facing) header.
+struct GLFWwindow;
+
+namespace Luma {
+
+class GlfwWindow final : public Window {
+public:
+    explicit GlfwWindow(const WindowProps& props);
+    ~GlfwWindow() override;
+
+    void PollEvents() override;
+    bool ShouldClose() const override;
+
+    void SetEventCallback(EventCallback callback) override {
+        m_data.callback = std::move(callback);
+    }
+
+    u32 Width() const override { return m_data.width; }
+    u32 Height() const override { return m_data.height; }
+    void* NativeHandle() const override;
+
+    // Stored behind the GLFW user pointer so static callbacks can reach it.
+    // Public because the (file-local) GLFW callbacks retrieve it via the user
+    // pointer; it carries no invariants worth hiding.
+    struct WindowData {
+        std::string title;
+        u32 width = 0;
+        u32 height = 0;
+        EventCallback callback;
+    };
+
+private:
+    void InstallCallbacks();
+
+    GLFWwindow* m_window = nullptr;
+    WindowData m_data;
+};
+
+}  // namespace Luma
