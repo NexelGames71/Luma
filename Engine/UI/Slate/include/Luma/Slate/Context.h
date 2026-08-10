@@ -43,9 +43,11 @@ enum class Align { Left, Center, Right };
 
 class Context {
 public:
-    // Loads the base + title fonts through the renderer. Returns false on error.
+    // Loads the base + title fonts through the renderer. If titleFontPath is
+    // empty the base font is reused for titles. Returns false on error.
     bool Init(Renderer& renderer, const std::string& fontPath,
-              f32 baseSize = 18.0f, f32 titleSize = 30.0f);
+              const std::string& titleFontPath = {}, f32 baseSize = 18.0f,
+              f32 titleSize = 30.0f);
 
     // --- Input feed (call from the app's event callback) --------------------
     void OnMouseMove(f32 x, f32 y);

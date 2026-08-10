@@ -42,9 +42,12 @@ Theme DarkTheme() {
 }
 
 bool Context::Init(Renderer& renderer, const std::string& fontPath,
-                   f32 baseSize, f32 titleSize) {
+                   const std::string& titleFontPath, f32 baseSize,
+                   f32 titleSize) {
+    const std::string& titlePath =
+        titleFontPath.empty() ? fontPath : titleFontPath;
     bool ok = m_font.LoadFromFile(renderer, fontPath, baseSize);
-    ok = m_titleFont.LoadFromFile(renderer, fontPath, titleSize) && ok;
+    ok = m_titleFont.LoadFromFile(renderer, titlePath, titleSize) && ok;
     return ok;
 }
 

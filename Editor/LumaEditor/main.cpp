@@ -22,8 +22,6 @@ using namespace Luma;
 
 namespace {
 
-constexpr const char* kFontPath = "C:/Windows/Fonts/segoeui.ttf";
-
 // Finds an editor asset (e.g. logo) by searching Content/Editor upward from the
 // working directory.
 std::string FindEditorAsset(const std::string& file) {
@@ -106,8 +104,13 @@ int main(int argc, char** argv) {
     rc.vsync = true;
     std::unique_ptr<Renderer> renderer = CreateVulkanRenderer(*window, rc);
 
+    // Fonts: Open Sans (bundled), falling back to Segoe UI if not found.
+    std::string bodyFont = FindEditorAsset("Fonts/OpenSans-Regular.ttf");
+    std::string titleFont = FindEditorAsset("Fonts/OpenSans-SemiBold.ttf");
+    if (bodyFont.empty()) bodyFont = "C:/Windows/Fonts/segoeui.ttf";
+    if (titleFont.empty()) titleFont = bodyFont;
     Slate::Context ui;
-    if (!ui.Init(*renderer, kFontPath)) {
+    if (!ui.Init(*renderer, bodyFont, titleFont)) {
         LUMA_LOG_ERROR("Editor", "failed to load UI font");
     }
 
