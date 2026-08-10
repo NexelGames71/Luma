@@ -39,11 +39,19 @@ private:
         std::filesystem::path file;
     };
 
+    void CreateFromInputs(BrowserResult& result);
+
     int m_tab = 1;  // 0 = Your Projects, 1 = New Project, 2 = About
     std::string m_name = "Ancient Simulation";
     std::string m_directory;
     GameTemplate m_template = GameTemplate::ThirdPerson;
     std::string m_status;
+
+    // Setup Options (collapsible footer section).
+    bool m_setupOpen = false;
+    bool m_vsync = true;
+    bool m_gitInit = false;
+    bool m_starterContent = true;
 
     std::vector<ProjectEntry> m_projects;
     bool m_scanned = false;

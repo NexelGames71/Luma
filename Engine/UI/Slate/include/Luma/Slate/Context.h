@@ -61,6 +61,10 @@ public:
     void Panel(const Rect& rect, Color color);
     void PanelBordered(const Rect& rect, Color fill, Color border,
                        f32 thickness = 1.0f);
+    void GradientRect(const Rect& rect, Color top, Color bottom);
+    void Triangle(Vec2 a, Vec2 b, Vec2 c, Color color);
+    // Draws the Luma gem/prism logo mark centered at `center`.
+    void LogoMark(Vec2 center, f32 radius);
     void Label(Vec2 pos, std::string_view text, Color color);
     void LabelIn(const Rect& rect, std::string_view text, Color color,
                  Align align = Align::Left, bool title = false);
@@ -70,6 +74,10 @@ public:
                    std::string_view placeholder = {});
     bool Card(u64 id, const Rect& rect, std::string_view title,
               std::string_view desc, bool selected);
+    bool Checkbox(u64 id, const Rect& box, std::string_view label, bool& value);
+    // A collapsible section header; toggles `open` when clicked.
+    bool CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
+                          bool& open);
 
     Theme& theme() { return m_theme; }
     Font& font() { return m_font; }

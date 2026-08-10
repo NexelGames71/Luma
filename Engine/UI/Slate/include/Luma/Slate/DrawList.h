@@ -19,7 +19,9 @@ public:
     void PopClip();
 
     void AddRectFilled(const Rect& rect, Color color);
+    void AddRectFilledGradient(const Rect& rect, Color top, Color bottom);
     void AddRectOutline(const Rect& rect, Color color, f32 thickness = 1.0f);
+    void AddTriangle(Vec2 a, Vec2 b, Vec2 c, Color color);
     void AddImage(TextureHandle texture, const Rect& dst, const Rect& uv,
                   Color tint);
     void AddText(const Font& font, Vec2 pos, std::string_view text, Color color);
@@ -28,6 +30,7 @@ public:
     const UIDrawData& Build();
 
 private:
+    void EnsureCommand(TextureHandle texture);
     void AddQuad(TextureHandle texture, const Rect& dst, const Rect& uv,
                  Color color);
     Rect CurrentClip() const;

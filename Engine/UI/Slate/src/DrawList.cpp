@@ -21,11 +21,8 @@ void DrawList::PopClip() {
     if (!m_clipStack.empty()) m_clipStack.pop_back();
 }
 
-void DrawList::AddQuad(TextureHandle texture, const Rect& dst, const Rect& uv,
-                       Color color) {
+void DrawList::EnsureCommand(TextureHandle texture) {
     Rect clip = CurrentClip();
-
-    // Start a new command if texture or clip differs from the last one.
     bool needNew = m_commands.empty();
     if (!needNew) {
         const UIDrawCommand& last = m_commands.back();
@@ -44,7 +41,11 @@ void DrawList::AddQuad(TextureHandle texture, const Rect& dst, const Rect& uv,
         cmd.clipH = clip.h;
         m_commands.push_back(cmd);
     }
+}
 
+void DrawList::AddQuad(TextureHandle texture, const Rect& dst, const Rect& uv,
+                       Color color) {
+    EnsureCommand(texture);
     u32 base = static_cast<u32>(m_vertices.size());
     u32 packed = color.Packed();
     m_vertices.push_back({dst.x, dst.y, uv.x, uv.y, packed});
@@ -61,6 +62,34 @@ void DrawList::AddQuad(TextureHandle texture, const Rect& dst, const Rect& uv,
 void DrawList::AddRectFilled(const Rect& rect, Color color) {
     // texture 0 = the backend's 1x1 white texture.
     AddQuad(0, rect, Rect{0.0f, 0.0f, 1.0f, 1.0f}, color);
+}
+
+void DrawList::AddRectFilledGradient(const Rect& rect, Color top,
+                                     Color bottom) {
+    EnsureCommand(0);
+    u32 base = static_cast<u32>(m_vertices.size());
+    u32 t = top.Packed();
+    u32 b = bottom.Packed();
+    m_vertices.push_back({rect.x, rect.y, 0.0f, 0.0f, t});
+    m_vertices.push_back({rect.Right(), rect.y, 1.0f, 0.0f, t});
+    m_vertices.push_back({rect.Right(), rect.Bottom(), 1.0f, 1.0f, b});
+    m_vertices.push_back({rect.x, rect.Bottom(), 0.0f, 1.0f, b});
+    u32 quad[6] = {base, base + 1, base + 2, base + 2, base + 3, base};
+    for (u32 i : quad) m_indices.push_back(i);
+    m_commands.back().indexCount += 6;
+}
+
+void DrawList::AddTriangle(Vec2 a, Vec2 b, Vec2 c, Color color) {
+    EnsureCommand(0);
+    u32 base = static_cast<u32>(m_vertices.size());
+    u32 packed = color.Packed();
+    m_vertices.push_back({a.x, a.y, 0.0f, 0.0f, packed});
+    m_vertices.push_back({b.x, b.y, 0.5f, 1.0f, packed});
+    m_vertices.push_back({c.x, c.y, 1.0f, 0.0f, packed});
+    m_indices.push_back(base);
+    m_indices.push_back(base + 1);
+    m_indices.push_back(base + 2);
+    m_commands.back().indexCount += 3;
 }
 
 void DrawList::AddRectOutline(const Rect& rect, Color color, f32 t) {

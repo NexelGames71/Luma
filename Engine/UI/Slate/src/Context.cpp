@@ -117,6 +117,32 @@ void Context::PanelBordered(const Rect& rect, Color fill, Color border,
     m_draw.AddRectOutline(rect, border, thickness);
 }
 
+void Context::GradientRect(const Rect& rect, Color top, Color bottom) {
+    m_draw.AddRectFilledGradient(rect, top, bottom);
+}
+
+void Context::Triangle(Vec2 a, Vec2 b, Vec2 c, Color color) {
+    m_draw.AddTriangle(a, b, c, color);
+}
+
+void Context::LogoMark(Vec2 center, f32 radius) {
+    // A four-facet gem: top/right/bottom/left points around the center, with
+    // alternating accent shades to read as a lit prism.
+    f32 r = radius;
+    Vec2 top{center.x, center.y - r};
+    Vec2 right{center.x + r * 0.72f, center.y};
+    Vec2 bottom{center.x, center.y + r};
+    Vec2 left{center.x - r * 0.72f, center.y};
+    Color a = Color::RGB(64, 156, 240);
+    Color b = Color::RGB(42, 118, 200);
+    Color c = Color::RGB(90, 180, 255);
+    Color d = Color::RGB(30, 96, 170);
+    m_draw.AddTriangle(top, right, center, a);
+    m_draw.AddTriangle(right, bottom, center, b);
+    m_draw.AddTriangle(bottom, left, center, d);
+    m_draw.AddTriangle(left, top, center, c);
+}
+
 void Context::Label(Vec2 pos, std::string_view text, Color color) {
     m_draw.AddText(m_font, pos, text, color);
 }
@@ -263,6 +289,66 @@ bool Context::Card(u64 id, const Rect& rect, std::string_view title,
     m_draw.AddText(m_font, {rect.x + 12.0f, rect.Bottom() - 26.0f}, desc,
                    m_theme.textDim);
     m_draw.PopClip();
+    return clicked;
+}
+
+bool Context::Checkbox(u64 id, const Rect& box, std::string_view label,
+                       bool& value) {
+    // Clickable region spans the box plus the label.
+    f32 labelW = m_font.Measure(label).x;
+    Rect hitRect{box.x, box.y, box.w + 8.0f + labelW, box.h};
+    bool hovered = hitRect.Contains(m_mouse);
+    if (hovered) m_hot = id;
+    bool changed = false;
+    if (hovered && m_mousePressed[0]) m_active = id;
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) {
+            value = !value;
+            changed = true;
+        }
+        m_active = 0;
+    }
+
+    m_draw.AddRectFilled(box, m_theme.fieldBg);
+    m_draw.AddRectOutline(box, hovered ? m_theme.accent : m_theme.fieldBorder,
+                          1.0f);
+    if (value) {
+        m_draw.AddRectFilled(box.Inset(4.0f, 4.0f), m_theme.accent);
+    }
+    m_draw.AddText(m_font, {box.Right() + 8.0f,
+                           box.y + (box.h - m_font.LineHeight()) * 0.5f},
+                   label, m_theme.text);
+    return changed;
+}
+
+bool Context::CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
+                               bool& open) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) m_hot = id;
+    bool clicked = false;
+    if (hovered && m_mousePressed[0]) m_active = id;
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) {
+            open = !open;
+            clicked = true;
+        }
+        m_active = 0;
+    }
+
+    m_draw.AddRectFilled(rect, hovered ? m_theme.buttonHover : m_theme.button);
+    // Disclosure triangle.
+    f32 cy = rect.y + rect.h * 0.5f;
+    f32 cx = rect.x + 14.0f;
+    if (open) {
+        m_draw.AddTriangle({cx - 5, cy - 3}, {cx + 5, cy - 3}, {cx, cy + 4},
+                           m_theme.textDim);
+    } else {
+        m_draw.AddTriangle({cx - 3, cy - 5}, {cx + 4, cy}, {cx - 3, cy + 5},
+                           m_theme.textDim);
+    }
+    m_draw.AddText(m_font, {rect.x + 28.0f,
+                           rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
+                   label, m_theme.text);
     return clicked;
 }
 

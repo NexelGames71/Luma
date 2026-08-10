@@ -53,43 +53,95 @@ void ProjectBrowser::Rescan() {
     m_scanned = true;
 }
 
+void ProjectBrowser::CreateFromInputs(BrowserResult& result) {
+    ProjectDesc desc;
+    desc.name = m_name;
+    desc.parentDirectory = m_directory;
+    desc.gameTemplate = m_template;
+    std::string err;
+    if (auto project = Project::Create(desc, &err)) {
+        result.launch = true;
+        result.projectFile = project->ProjectFile();
+        m_status = "Created '" + project->Name() + "'";
+    } else {
+        m_status = err;
+    }
+}
+
 BrowserResult ProjectBrowser::Draw(Slate::Context& ui, f32 width, f32 height) {
     if (!m_scanned) Rescan();
     BrowserResult result;
     Slate::Theme& t = ui.theme();
 
-    // Background.
     ui.Panel({0, 0, width, height}, t.windowBg);
 
-    // Header bar with wordmark.
-    Rect header{0, 0, width, 64};
-    ui.Panel(header, t.header);
-    ui.LabelIn({24, 0, 300, 64}, "LUMA", t.accentText, Align::Left, true);
-    ui.LabelIn({0, 0, width - 24, 64}, "Engine", t.textDim, Align::Right);
+    // Banner: gradient + gem logo + wordmark.
+    Rect banner{0, 0, width, 80};
+    ui.GradientRect(banner, Color::RGB(30, 36, 52), Color::RGB(16, 18, 24));
+    ui.LogoMark({44, 40}, 20.0f);
+    ui.LabelIn({76, 10, 320, 42}, "LUMA", t.accentText, Align::Left, true);
+    ui.LabelIn({78, 50, 320, 20}, "ENGINE", t.textDim, Align::Left);
+    ui.LabelIn({0, 0, width - 24, 80}, "Project Browser", t.textDim,
+               Align::Right);
 
     // Tabs.
     const char* tabNames[] = {"Your Projects", "New Project", "About"};
-    f32 tabW = 150.0f;
+    const f32 tabW = 150.0f;
+    const f32 tabY = 80.0f;
     for (int i = 0; i < 3; ++i) {
-        Rect r{24 + i * tabW, 64, tabW, 40};
+        Rect r{24 + i * tabW, tabY, tabW, 40};
         if (ui.Tab(Slate::Context::ID(tabNames[i]), r, tabNames[i],
                    m_tab == i)) {
             m_tab = i;
         }
     }
-    Rect content{24, 120, width - 48, height - 120 - 72};
+
+    const f32 footerH = 60.0f;
+    const f32 setupH = 34.0f;
+    const f32 setupY = height - footerH - setupH;
+    const f32 contentTop = tabY + 40.0f + 8.0f;
+    Rect content{24, contentTop, width - 48, setupY - contentTop - 8.0f};
     ui.PanelBordered(content, t.panelBg, t.panelBorder, 1.0f);
 
     if (m_tab == 0) DrawYourProjects(ui, content, result);
     else if (m_tab == 1) DrawNewProject(ui, content, result);
     else DrawAbout(ui, content);
 
-    // Status / footer bar.
-    Rect footer{0, height - 56, width, 56};
+    // Setup Options (collapsible) + expanded panel drawn as an overlay.
+    if (m_setupOpen) {
+        Rect panel{0, setupY - 122, width, 122};
+        ui.Panel(panel, t.header);
+        ui.PanelBordered(panel, Color::RGBA(0, 0, 0, 0), t.panelBorder);
+        f32 ox = 32.0f;
+        f32 oy = panel.y + 18.0f;
+        ui.Checkbox(Slate::Context::ID("vsync"), {ox, oy, 18, 18},
+                    "Enable VSync", m_vsync);
+        oy += 30.0f;
+        ui.Checkbox(Slate::Context::ID("git"), {ox, oy, 18, 18},
+                    "Initialize Git repository", m_gitInit);
+        oy += 30.0f;
+        ui.Checkbox(Slate::Context::ID("starter"), {ox, oy, 18, 18},
+                    "Generate starter content", m_starterContent);
+    }
+    ui.CollapsingHeader(Slate::Context::ID("setup"),
+                        {0, setupY, width, setupH}, "Setup Options",
+                        m_setupOpen);
+
+    // Footer: Options (left), status (center), Create Project (right).
+    Rect footer{0, height - footerH, width, footerH};
     ui.Panel(footer, t.header);
+    ui.Button(Slate::Context::ID("options"),
+              {24, height - footerH + 11, 130, 38}, "Options...");
     if (!m_status.empty()) {
-        ui.LabelIn({24, height - 56, width - 300, 56}, m_status,
-                   Color::RGB(220, 120, 120), Align::Left);
+        ui.LabelIn({170, height - footerH, width - 380, footerH}, m_status,
+                   m_status.rfind("Created", 0) == 0 ? t.textDim
+                                                     : Color::RGB(220, 120, 120),
+                   Align::Left);
+    }
+    if (ui.Button(Slate::Context::ID("create"),
+                  {width - 190, height - footerH + 11, 166, 38},
+                  "Create Project")) {
+        CreateFromInputs(result);
     }
     return result;
 }
@@ -132,23 +184,7 @@ void ProjectBrowser::DrawNewProject(Slate::Context& ui, const Rect& content,
                "Selecting a template initializes the project with default "
                "behaviors.",
                t.textDim);
-
-    // Create button, bottom-right of content.
-    Rect createBtn{content.Right() - 190, content.Bottom() - 52, 166, 38};
-    if (ui.Button(Slate::Context::ID("create"), createBtn, "Create Project")) {
-        ProjectDesc desc;
-        desc.name = m_name;
-        desc.parentDirectory = m_directory;
-        desc.gameTemplate = m_template;
-        std::string err;
-        if (auto project = Project::Create(desc, &err)) {
-            result.launch = true;
-            result.projectFile = project->ProjectFile();
-            m_status = "Created '" + project->Name() + "'";
-        } else {
-            m_status = err;
-        }
-    }
+    LUMA_UNUSED(result);
 }
 
 void ProjectBrowser::DrawYourProjects(Slate::Context& ui, const Rect& content,
