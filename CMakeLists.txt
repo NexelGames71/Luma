@@ -58,6 +58,10 @@ endif()
 # ---------------------------------------------------------------------------
 add_subdirectory(Engine/Core)
 
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/Engine/Math/CMakeLists.txt)
+    add_subdirectory(Engine/Math)
+endif()
+
 # Later modules are added as they come online (keeps every milestone buildable).
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/Engine/Rendering/RHI/CMakeLists.txt)
     add_subdirectory(Engine/Rendering/RHI)

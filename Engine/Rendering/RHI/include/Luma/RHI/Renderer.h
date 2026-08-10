@@ -84,6 +84,10 @@ public:
     // Begin/EndFrame). Only the rendered window contents are written.
     virtual void CaptureFrame(const std::string& pngPath) = 0;
 
+    // Renders the demo 3D scene into an offscreen target of the given size and
+    // returns a UI texture handle to display it. Call before BeginFrame.
+    virtual TextureHandle RenderSceneView(u32 width, u32 height, f32 dt) = 0;
+
     // Block until the device is idle (use before teardown).
     virtual void WaitIdle() = 0;
 };

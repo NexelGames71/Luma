@@ -223,6 +223,39 @@ void VulkanUIPass::DestroyTexture(TextureHandle handle) {
     m_textures.erase(handle);
 }
 
+TextureHandle VulkanUIPass::RegisterExternalTexture(VkImageView view) {
+    VkDescriptorSetAllocateInfo alloc{};
+    alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    alloc.descriptorPool = m_descriptorPool;
+    alloc.descriptorSetCount = 1;
+    alloc.pSetLayouts = &m_setLayout;
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    VK_CHECK(vkAllocateDescriptorSets(m_device, &alloc, &set));
+
+    TextureHandle handle = m_nextHandle++;
+    m_externalSets.emplace(handle, set);
+    UpdateExternalTexture(handle, view);
+    return handle;
+}
+
+void VulkanUIPass::UpdateExternalTexture(TextureHandle handle,
+                                         VkImageView view) {
+    auto it = m_externalSets.find(handle);
+    if (it == m_externalSets.end()) return;
+    VkDescriptorImageInfo info{};
+    info.sampler = m_sampler;
+    info.imageView = view;
+    info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = it->second;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &info;
+    vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+}
+
 void VulkanUIPass::EnsureBuffer(GpuBuffer& buffer, VkDeviceSize needed,
                                 VkBufferUsageFlags usage) {
     if (buffer.size >= needed && buffer.buffer != VK_NULL_HANDLE) return;
@@ -282,9 +315,16 @@ void VulkanUIPass::Record(VkCommandBuffer cmd, u32 frame,
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         TextureHandle handle = c.texture ? c.texture : m_whiteTexture;
-        auto it = m_textures.find(handle);
-        if (it == m_textures.end()) it = m_textures.find(m_whiteTexture);
-        VkDescriptorSet set = it->second->DescriptorSet();
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        if (auto it = m_textures.find(handle); it != m_textures.end()) {
+            set = it->second->DescriptorSet();
+        } else if (auto ex = m_externalSets.find(handle);
+                   ex != m_externalSets.end()) {
+            set = ex->second;
+        }
+        if (set == VK_NULL_HANDLE) {
+            set = m_textures[m_whiteTexture]->DescriptorSet();
+        }
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 m_pipelineLayout, 0, 1, &set, 0, nullptr);
 

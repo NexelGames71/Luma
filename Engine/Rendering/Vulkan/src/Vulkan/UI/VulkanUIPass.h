@@ -28,6 +28,13 @@ public:
     void DestroyTexture(TextureHandle handle);
     TextureHandle WhiteTexture() const { return m_whiteTexture; }
 
+    // Registers an externally-owned image view (e.g. a render target) as a
+    // sampleable UI texture. Update it (on resize) via UpdateExternalTexture.
+    TextureHandle RegisterExternalTexture(VkImageView view);
+    void UpdateExternalTexture(TextureHandle handle, VkImageView view);
+
+    VkSampler Sampler() const { return m_sampler; }
+
     // Records draw commands into `cmd` for the given frame slot.
     void Record(VkCommandBuffer cmd, u32 frame, const UIDrawData& data);
 
@@ -50,6 +57,7 @@ private:
     std::vector<GpuBuffer> m_indexBuffers;
 
     std::unordered_map<TextureHandle, std::unique_ptr<VulkanTexture>> m_textures;
+    std::unordered_map<TextureHandle, VkDescriptorSet> m_externalSets;
     TextureHandle m_nextHandle = 1;
     TextureHandle m_whiteTexture = 0;
 };

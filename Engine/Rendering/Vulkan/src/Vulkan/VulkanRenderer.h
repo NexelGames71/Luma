@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Luma/RHI/Renderer.h"
+#include "Vulkan/Scene/VulkanSceneView.h"
 #include "Vulkan/UI/VulkanUIPass.h"
 #include "Vulkan/VulkanCommon.h"
 #include "Vulkan/VulkanDevice.h"
@@ -33,6 +34,7 @@ public:
     void CaptureFrame(const std::string& pngPath) override {
         m_capturePath = pngPath;
     }
+    TextureHandle RenderSceneView(u32 width, u32 height, f32 dt) override;
     void WaitIdle() override;
 
 private:
@@ -53,6 +55,7 @@ private:
     std::unique_ptr<VulkanDevice> m_device;
     std::unique_ptr<VulkanSwapchain> m_swapchain;
     std::unique_ptr<VulkanUIPass> m_uiPass;
+    std::unique_ptr<VulkanSceneView> m_sceneView;
 
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     std::array<VkCommandBuffer, kFramesInFlight> m_commandBuffers{};

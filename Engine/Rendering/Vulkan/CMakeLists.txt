@@ -10,6 +10,7 @@ add_library(LumaRenderVulkan STATIC
     src/Vulkan/VulkanMemory.cpp
     src/Vulkan/VulkanTexture.cpp
     src/Vulkan/UI/VulkanUIPass.cpp
+    src/Vulkan/Scene/VulkanSceneView.cpp
     src/Vulkan/VulkanRenderer.cpp)
 
 add_library(Luma::RenderVulkan ALIAS LumaRenderVulkan)
@@ -24,7 +25,7 @@ if(NOT Vulkan_GLSLC_EXECUTABLE)
 endif()
 
 set(_luma_spv_outputs)
-foreach(shader ui.vert ui.frag)
+foreach(shader ui.vert ui.frag scene.vert scene.frag)
     add_custom_command(
         OUTPUT ${_luma_shader_out}/${shader}.spv
         COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3
@@ -46,7 +47,7 @@ target_include_directories(LumaRenderVulkan
 
 target_link_libraries(LumaRenderVulkan
     PUBLIC Luma::Core Luma::RHI Luma::Platform
-    PRIVATE Vulkan::Vulkan)
+    PRIVATE Vulkan::Vulkan Luma::Math)
 
 # Let the engine locate the SDK's validation layer even when it isn't registered
 # with the loader (common on machines without VULKAN_SDK set globally).

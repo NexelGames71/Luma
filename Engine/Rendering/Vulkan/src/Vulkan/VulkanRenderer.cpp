@@ -80,7 +80,8 @@ VulkanRenderer::~VulkanRenderer() {
     if (m_device) vkDeviceWaitIdle(m_device->Logical());
     VkDevice device = m_device ? m_device->Logical() : VK_NULL_HANDLE;
 
-    m_uiPass.reset();  // uses the device; destroy before it
+    m_sceneView.reset();  // uses the device + UI pass; destroy first
+    m_uiPass.reset();     // uses the device; destroy before it
     DestroyRenderFinishedSemaphores();
     for (auto& sem : m_imageAvailable) {
         if (sem) vkDestroySemaphore(device, sem, nullptr);
@@ -348,6 +349,18 @@ void VulkanRenderer::EndFrame() {
     }
 
     m_frame = (m_frame + 1) % kFramesInFlight;
+}
+
+TextureHandle VulkanRenderer::RenderSceneView(u32 width, u32 height, f32 dt) {
+#if defined(LUMA_SHADER_DIR)
+    if (!m_sceneView && m_uiPass) {
+        m_sceneView = std::make_unique<VulkanSceneView>(
+            m_device->Physical(), m_device->Logical(),
+            m_device->GraphicsQueue(), *m_device->Queues().graphics, *m_uiPass,
+            LUMA_SHADER_DIR);
+    }
+#endif
+    return m_sceneView ? m_sceneView->Render(width, height, dt) : 0;
 }
 
 void VulkanRenderer::WaitIdle() {

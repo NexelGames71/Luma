@@ -154,6 +154,17 @@ int main(int argc, char** argv) {
         window->PollEvents();
         Timestep dt = clock.Tick();
 
+        // Render the 3D scene into the editor viewport (using last frame's rect),
+        // before opening the swapchain frame.
+        if (editorMode && editor && splashTime >= kSplashDuration) {
+            Slate::Rect vp = editor->ViewportRect();
+            if (vp.w > 4.0f && vp.h > 4.0f) {
+                TextureHandle sceneTex = renderer->RenderSceneView(
+                    static_cast<u32>(vp.w), static_cast<u32>(vp.h), dt);
+                editor->SetViewportTexture(sceneTex);
+            }
+        }
+
         if (!renderer->BeginFrame()) continue;
         ui.BeginFrame(static_cast<f32>(window->Width()),
                       static_cast<f32>(window->Height()), dt);
