@@ -8,9 +8,10 @@ add_executable(LumaTests
     Core/ConfigTests.cpp
     Core/EventTests.cpp
     Core/LayerStackTests.cpp
-    Core/ApplicationTests.cpp)
+    Core/ApplicationTests.cpp
+    Project/ProjectTests.cpp)
 
-target_link_libraries(LumaTests PRIVATE Luma::Core Catch2::Catch2WithMain)
+target_link_libraries(LumaTests PRIVATE Luma::Core Luma::Project Catch2::Catch2WithMain)
 
 set_target_properties(LumaTests PROPERTIES FOLDER "Tests")
 
