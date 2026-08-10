@@ -11,6 +11,7 @@ const char* ToString(EventType type) {
         case EventType::WindowLostFocus:     return "WindowLostFocus";
         case EventType::KeyPressed:          return "KeyPressed";
         case EventType::KeyReleased:         return "KeyReleased";
+        case EventType::KeyTyped:            return "KeyTyped";
         case EventType::MouseButtonPressed:  return "MouseButtonPressed";
         case EventType::MouseButtonReleased: return "MouseButtonReleased";
         case EventType::MouseMoved:          return "MouseMoved";

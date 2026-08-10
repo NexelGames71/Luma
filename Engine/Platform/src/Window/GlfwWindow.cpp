@@ -125,6 +125,13 @@ void GlfwWindow::InstallCallbacks() {
         }
     });
 
+    glfwSetCharCallback(m_window, [](GLFWwindow* w, unsigned int codepoint) {
+        auto* data = DataFrom(w);
+        if (!data || !data->callback) return;
+        KeyTypedEvent e(codepoint);
+        data->callback(e);
+    });
+
     glfwSetMouseButtonCallback(m_window, [](GLFWwindow* w, int button,
                                             int action, int /*mods*/) {
         auto* data = DataFrom(w);

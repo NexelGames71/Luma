@@ -16,6 +16,7 @@ enum class EventType : u16 {
     WindowLostFocus,
     KeyPressed,
     KeyReleased,
+    KeyTyped,
     MouseButtonPressed,
     MouseButtonReleased,
     MouseMoved,

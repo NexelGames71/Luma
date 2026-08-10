@@ -3,7 +3,8 @@
 
 add_library(LumaSlate STATIC
     src/Font.cpp
-    src/DrawList.cpp)
+    src/DrawList.cpp
+    src/Context.cpp)
 
 add_library(Luma::Slate ALIAS LumaSlate)
 

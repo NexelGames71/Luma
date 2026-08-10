@@ -70,6 +70,19 @@ private:
     i32 m_keycode;
 };
 
+class KeyTypedEvent final : public Event {
+public:
+    explicit KeyTypedEvent(u32 codepoint) : m_codepoint(codepoint) {}
+
+    u32 Codepoint() const { return m_codepoint; }
+
+    LUMA_EVENT_CLASS_TYPE(KeyTyped)
+    LUMA_EVENT_CLASS_CATEGORY(EventCategory_Keyboard | EventCategory_Input)
+
+private:
+    u32 m_codepoint;
+};
+
 class MouseButtonPressedEvent final : public Event {
 public:
     explicit MouseButtonPressedEvent(i32 button) : m_button(button) {}

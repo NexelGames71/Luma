@@ -1,0 +1,107 @@
+#pragma once
+
+#include <string>
+#include <string_view>
+
+#include "Luma/RHI/Renderer.h"
+#include "Luma/Slate/DrawList.h"
+#include "Luma/Slate/Font.h"
+#include "Luma/Slate/Types.h"
+
+// Luma Slate immediate-mode UI context. The app feeds input each frame, then
+// calls widget functions between BeginFrame/EndFrame; EndFrame returns the
+// UIDrawData to hand to Renderer::DrawUI.
+
+namespace Luma::Slate {
+
+struct Theme {
+    Color windowBg;
+    Color panelBg;
+    Color panelBorder;
+    Color header;
+    Color button;
+    Color buttonHover;
+    Color buttonActive;
+    Color buttonText;
+    Color text;
+    Color textDim;
+    Color accent;
+    Color accentText;
+    Color fieldBg;
+    Color fieldBorder;
+    Color cardBg;
+    Color cardHover;
+    Color cardSelected;
+    Color caret;
+};
+
+Theme DarkTheme();
+
+// Horizontal text alignment for LabelIn.
+enum class Align { Left, Center, Right };
+
+class Context {
+public:
+    // Loads the base + title fonts through the renderer. Returns false on error.
+    bool Init(Renderer& renderer, const std::string& fontPath,
+              f32 baseSize = 18.0f, f32 titleSize = 30.0f);
+
+    // --- Input feed (call from the app's event callback) --------------------
+    void OnMouseMove(f32 x, f32 y);
+    void OnMouseButton(int button, bool down);  // 0=left,1=right,2=middle
+    void OnScroll(f32 y);
+    void OnText(u32 codepoint);
+    void OnKey(int glfwKey, bool down);
+
+    // --- Frame --------------------------------------------------------------
+    void BeginFrame(f32 displayWidth, f32 displayHeight, f32 dt);
+    const UIDrawData& EndFrame();
+
+    // --- Widgets ------------------------------------------------------------
+    void Panel(const Rect& rect, Color color);
+    void PanelBordered(const Rect& rect, Color fill, Color border,
+                       f32 thickness = 1.0f);
+    void Label(Vec2 pos, std::string_view text, Color color);
+    void LabelIn(const Rect& rect, std::string_view text, Color color,
+                 Align align = Align::Left, bool title = false);
+    bool Button(u64 id, const Rect& rect, std::string_view label);
+    bool Tab(u64 id, const Rect& rect, std::string_view label, bool active);
+    bool TextField(u64 id, const Rect& rect, std::string& text,
+                   std::string_view placeholder = {});
+    bool Card(u64 id, const Rect& rect, std::string_view title,
+              std::string_view desc, bool selected);
+
+    Theme& theme() { return m_theme; }
+    Font& font() { return m_font; }
+    Font& titleFont() { return m_titleFont; }
+    Vec2 mouse() const { return m_mouse; }
+
+    // FNV-1a hash for stable widget ids from string literals.
+    static u64 ID(std::string_view s);
+
+private:
+    DrawList m_draw;
+    Font m_font;
+    Font m_titleFont;
+    Theme m_theme = DarkTheme();
+
+    Vec2 m_mouse;
+    bool m_mouseDown[3] = {};
+    bool m_mousePressed[3] = {};
+    bool m_mouseReleased[3] = {};
+    f32 m_scroll = 0.0f;
+    std::string m_textInput;
+    bool m_keyBackspace = false, m_keyDelete = false;
+    bool m_keyLeft = false, m_keyRight = false;
+    bool m_keyHome = false, m_keyEnd = false, m_keyEnter = false;
+
+    u64 m_hot = 0;
+    u64 m_active = 0;
+    u64 m_focus = 0;
+    usize m_caret = 0;
+    f32 m_time = 0.0f;
+    f32 m_displayW = 0.0f;
+    f32 m_displayH = 0.0f;
+};
+
+}  // namespace Luma::Slate
