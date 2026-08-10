@@ -28,6 +28,12 @@ std::string ToLower(std::string_view s) {
 }  // namespace
 
 bool Config::LoadFromString(std::string_view text) {
+    // Skip a UTF-8 byte-order mark if present.
+    if (text.size() >= 3 && static_cast<u8>(text[0]) == 0xEF &&
+        static_cast<u8>(text[1]) == 0xBB && static_cast<u8>(text[2]) == 0xBF) {
+        text.remove_prefix(3);
+    }
+
     bool ok = true;
     std::string section;
     std::istringstream stream{std::string(text)};
