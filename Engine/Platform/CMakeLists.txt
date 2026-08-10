@@ -3,7 +3,8 @@
 luma_require_glfw()
 
 add_library(LumaPlatform STATIC
-    src/Window/GlfwWindow.cpp)
+    src/Window/GlfwWindow.cpp
+    src/Process/Process.cpp)
 
 add_library(Luma::Platform ALIAS LumaPlatform)
 
