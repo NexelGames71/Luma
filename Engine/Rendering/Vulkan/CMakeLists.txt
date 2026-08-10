@@ -7,7 +7,9 @@ add_library(LumaRenderVulkan STATIC
     src/Vulkan/VulkanDevice.cpp
     src/Vulkan/VulkanSwapchain.cpp
     src/Vulkan/VulkanShader.cpp
-    src/Vulkan/VulkanPipeline.cpp
+    src/Vulkan/VulkanMemory.cpp
+    src/Vulkan/VulkanTexture.cpp
+    src/Vulkan/UI/VulkanUIPass.cpp
     src/Vulkan/VulkanRenderer.cpp)
 
 add_library(Luma::RenderVulkan ALIAS LumaRenderVulkan)
@@ -22,7 +24,7 @@ if(NOT Vulkan_GLSLC_EXECUTABLE)
 endif()
 
 set(_luma_spv_outputs)
-foreach(shader triangle.vert triangle.frag)
+foreach(shader ui.vert ui.frag)
     add_custom_command(
         OUTPUT ${_luma_shader_out}/${shader}.spv
         COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3

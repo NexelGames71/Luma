@@ -62,10 +62,10 @@ VulkanRenderer::VulkanRenderer(Window& window, const RendererConfig& config)
     CreateRenderFinishedSemaphores();
 
 #if defined(LUMA_SHADER_DIR)
-    const std::string shaderDir = LUMA_SHADER_DIR;
-    m_trianglePipeline = std::make_unique<VulkanPipeline>(
-        m_device->Logical(), m_swapchain->Format(),
-        shaderDir + "/triangle.vert.spv", shaderDir + "/triangle.frag.spv");
+    m_uiPass = std::make_unique<VulkanUIPass>(
+        m_device->Physical(), m_device->Logical(), m_commandPool,
+        m_device->GraphicsQueue(), m_swapchain->Format(), kFramesInFlight,
+        LUMA_SHADER_DIR);
 #endif
 
     LUMA_LOG_INFO("Vulkan", "renderer ready");
@@ -75,7 +75,7 @@ VulkanRenderer::~VulkanRenderer() {
     if (m_device) vkDeviceWaitIdle(m_device->Logical());
     VkDevice device = m_device ? m_device->Logical() : VK_NULL_HANDLE;
 
-    m_trianglePipeline.reset();  // uses the device; destroy before it
+    m_uiPass.reset();  // uses the device; destroy before it
     DestroyRenderFinishedSemaphores();
     for (auto& sem : m_imageAvailable) {
         if (sem) vkDestroySemaphore(device, sem, nullptr);
@@ -220,43 +220,40 @@ bool VulkanRenderer::BeginFrame() {
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachments = &colorAttachment;
 
+    // Open the rendering pass and leave it open so DrawUI (and later, world
+    // rendering) can record into it before EndFrame closes and presents.
     vkCmdBeginRendering(cmd, &rendering);
-    if (m_trianglePipeline) {
-        VkExtent2D extent = m_swapchain->Extent();
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<f32>(extent.width);
-        viewport.height = static_cast<f32>(extent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = extent;
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          m_trianglePipeline->Handle());
-        vkCmdDraw(cmd, 3, 1, 0, 0);
-    }
-    vkCmdEndRendering(cmd);
-
-    TransitionImage(cmd, image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0,
-                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-
-    VK_CHECK(vkEndCommandBuffer(cmd));
     m_frameActive = true;
     return true;
+}
+
+void VulkanRenderer::DrawUI(const UIDrawData& data) {
+    if (!m_frameActive || !m_uiPass) return;
+    m_uiPass->Record(m_commandBuffers[m_frame], m_frame, data);
+}
+
+TextureHandle VulkanRenderer::CreateTexture(u32 width, u32 height,
+                                            const void* rgba8Pixels) {
+    return m_uiPass ? m_uiPass->CreateTexture(width, height, rgba8Pixels) : 0;
+}
+
+void VulkanRenderer::DestroyTexture(TextureHandle texture) {
+    if (m_uiPass) m_uiPass->DestroyTexture(texture);
 }
 
 void VulkanRenderer::EndFrame() {
     if (!m_frameActive) return;
     m_frameActive = false;
+
+    VkCommandBuffer cmd = m_commandBuffers[m_frame];
+    vkCmdEndRendering(cmd);
+    TransitionImage(cmd, m_swapchain->Image(m_imageIndex),
+                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    VK_CHECK(vkEndCommandBuffer(cmd));
 
     VkSemaphore waitSem = m_imageAvailable[m_frame];
     VkSemaphore signalSem = m_renderFinished[m_imageIndex];

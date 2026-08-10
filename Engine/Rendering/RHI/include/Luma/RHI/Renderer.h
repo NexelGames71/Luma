@@ -23,6 +23,39 @@ struct RendererConfig {
     bool vsync = true;
 };
 
+// --- 2D UI drawing (Luma Slate produces this; the backend renders it) --------
+
+// Opaque GPU texture handle. 0 is invalid.
+using TextureHandle = u64;
+
+// A UI vertex in screen-space pixels. `color` is packed RGBA8 (0xAABBGGRR).
+struct UIVertex {
+    f32 x, y;
+    f32 u, v;
+    u32 color;
+};
+
+// One draw call: a run of indices sampling `texture`, clipped to a rect (pixels).
+struct UIDrawCommand {
+    u32 indexOffset;
+    u32 indexCount;
+    TextureHandle texture;
+    f32 clipX, clipY, clipW, clipH;
+};
+
+// A full UI frame's geometry. Pointers are owned by the caller and must remain
+// valid for the duration of the DrawUI call.
+struct UIDrawData {
+    const UIVertex* vertices = nullptr;
+    u32 vertexCount = 0;
+    const u32* indices = nullptr;
+    u32 indexCount = 0;
+    const UIDrawCommand* commands = nullptr;
+    u32 commandCount = 0;
+    f32 displayWidth = 0.0f;
+    f32 displayHeight = 0.0f;
+};
+
 class Renderer {
 public:
     virtual ~Renderer() = default;
@@ -38,6 +71,14 @@ public:
 
     // Submit and present the frame started by BeginFrame.
     virtual void EndFrame() = 0;
+
+    // Records UI geometry into the current frame (call between Begin/EndFrame).
+    virtual void DrawUI(const UIDrawData& data) = 0;
+
+    // Creates an RGBA8 texture from tightly-packed pixels (width*height*4 bytes).
+    virtual TextureHandle CreateTexture(u32 width, u32 height,
+                                        const void* rgba8Pixels) = 0;
+    virtual void DestroyTexture(TextureHandle texture) = 0;
 
     // Block until the device is idle (use before teardown).
     virtual void WaitIdle() = 0;

@@ -5,10 +5,10 @@
 #include <vector>
 
 #include "Luma/RHI/Renderer.h"
+#include "Vulkan/UI/VulkanUIPass.h"
 #include "Vulkan/VulkanCommon.h"
 #include "Vulkan/VulkanDevice.h"
 #include "Vulkan/VulkanInstance.h"
-#include "Vulkan/VulkanPipeline.h"
 #include "Vulkan/VulkanSwapchain.h"
 
 namespace Luma {
@@ -26,6 +26,10 @@ public:
     void SetClearColor(const ClearColor& color) override { m_clearColor = color; }
     bool BeginFrame() override;
     void EndFrame() override;
+    void DrawUI(const UIDrawData& data) override;
+    TextureHandle CreateTexture(u32 width, u32 height,
+                                const void* rgba8Pixels) override;
+    void DestroyTexture(TextureHandle texture) override;
     void WaitIdle() override;
 
 private:
@@ -45,7 +49,7 @@ private:
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
     std::unique_ptr<VulkanDevice> m_device;
     std::unique_ptr<VulkanSwapchain> m_swapchain;
-    std::unique_ptr<VulkanPipeline> m_trianglePipeline;
+    std::unique_ptr<VulkanUIPass> m_uiPass;
 
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     std::array<VkCommandBuffer, kFramesInFlight> m_commandBuffers{};

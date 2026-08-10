@@ -94,7 +94,8 @@ int main() {
         app.RunOneFrame(dt);
 
         if (renderer->BeginFrame()) {
-            // Milestone 2: clear only. Geometry/UI recording lands in M3+.
+            // The runtime renders no UI itself yet; the editor/browser drive
+            // Luma Slate through renderer->DrawUI(). World rendering lands in M3+.
             renderer->EndFrame();
         }
 
