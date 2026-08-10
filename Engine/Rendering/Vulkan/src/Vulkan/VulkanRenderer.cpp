@@ -1,9 +1,14 @@
 #include "Vulkan/VulkanRenderer.h"
 
 #include <limits>
+#include <vector>
 
 #include "Luma/Platform/Window.h"
 #include "Luma/RHI/VulkanRenderer.h"
+#include "Vulkan/VulkanMemory.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 namespace Luma {
 namespace {
@@ -247,12 +252,44 @@ void VulkanRenderer::EndFrame() {
 
     VkCommandBuffer cmd = m_commandBuffers[m_frame];
     vkCmdEndRendering(cmd);
-    TransitionImage(cmd, m_swapchain->Image(m_imageIndex),
-                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0,
-                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+    VkImage image = m_swapchain->Image(m_imageIndex);
+    VkExtent2D extent = m_swapchain->Extent();
+    const bool capturing = !m_capturePath.empty();
+    GpuBuffer captureBuffer{};
+
+    if (capturing) {
+        TransitionImage(cmd, image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                        VK_ACCESS_TRANSFER_READ_BIT,
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT);
+        captureBuffer = CreateBuffer(
+            m_device->Physical(), m_device->Logical(),
+            VkDeviceSize(extent.width) * extent.height * 4,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            true);
+        VkBufferImageCopy region{};
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.imageExtent = {extent.width, extent.height, 1};
+        vkCmdCopyImageToBuffer(cmd, image,
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               captureBuffer.buffer, 1, &region);
+        TransitionImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                        VK_ACCESS_TRANSFER_READ_BIT, 0,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    } else {
+        TransitionImage(cmd, image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0,
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    }
     VK_CHECK(vkEndCommandBuffer(cmd));
 
     VkSemaphore waitSem = m_imageAvailable[m_frame];
@@ -287,6 +324,27 @@ void VulkanRenderer::EndFrame() {
         RecreateSwapchain();
     } else if (result != VK_SUCCESS) {
         LUMA_LOG_ERROR("Vulkan", "present failed: {}", VkResultString(result));
+    }
+
+    if (capturing) {
+        // Wait for the copy to finish, then write the PNG (swapchain is BGRA).
+        vkWaitForFences(m_device->Logical(), 1, &m_inFlight[m_frame], VK_TRUE,
+                        std::numeric_limits<u64>::max());
+        const u8* src = static_cast<const u8*>(captureBuffer.mapped);
+        const usize pixels = usize(extent.width) * extent.height;
+        std::vector<u8> rgba(pixels * 4);
+        for (usize i = 0; i < pixels; ++i) {
+            rgba[i * 4 + 0] = src[i * 4 + 2];
+            rgba[i * 4 + 1] = src[i * 4 + 1];
+            rgba[i * 4 + 2] = src[i * 4 + 0];
+            rgba[i * 4 + 3] = src[i * 4 + 3];
+        }
+        stbi_write_png(m_capturePath.c_str(), int(extent.width),
+                       int(extent.height), 4, rgba.data(),
+                       int(extent.width) * 4);
+        LUMA_LOG_INFO("Vulkan", "captured frame -> {}", m_capturePath);
+        DestroyBuffer(m_device->Logical(), captureBuffer);
+        m_capturePath.clear();
     }
 
     m_frame = (m_frame + 1) % kFramesInFlight;

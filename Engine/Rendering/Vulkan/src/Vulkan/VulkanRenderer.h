@@ -30,6 +30,9 @@ public:
     TextureHandle CreateTexture(u32 width, u32 height,
                                 const void* rgba8Pixels) override;
     void DestroyTexture(TextureHandle texture) override;
+    void CaptureFrame(const std::string& pngPath) override {
+        m_capturePath = pngPath;
+    }
     void WaitIdle() override;
 
 private:
@@ -62,6 +65,7 @@ private:
     u32 m_imageIndex = 0;
     bool m_frameActive = false;
     bool m_resizePending = false;
+    std::string m_capturePath;  // non-empty => capture this frame
 };
 
 }  // namespace Luma

@@ -39,7 +39,7 @@ private:
         std::filesystem::path file;
     };
 
-    int m_tab = 0;  // 0 = Your Projects, 1 = New Project, 2 = About
+    int m_tab = 1;  // 0 = Your Projects, 1 = New Project, 2 = About
     std::string m_name = "Ancient Simulation";
     std::string m_directory;
     GameTemplate m_template = GameTemplate::ThirdPerson;

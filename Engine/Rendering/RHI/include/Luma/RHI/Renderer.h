@@ -80,6 +80,10 @@ public:
                                         const void* rgba8Pixels) = 0;
     virtual void DestroyTexture(TextureHandle texture) = 0;
 
+    // Captures the frame currently being recorded to a PNG (call between
+    // Begin/EndFrame). Only the rendered window contents are written.
+    virtual void CaptureFrame(const std::string& pngPath) = 0;
+
     // Block until the device is idle (use before teardown).
     virtual void WaitIdle() = 0;
 };

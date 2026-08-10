@@ -67,6 +67,7 @@ int main(int argc, char** argv) {
 
     // Parse mode: --project <path.luma> opens the editor; otherwise the browser.
     std::filesystem::path projectFile;
+    std::string screenshotPath;
     bool editorMode = false;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -75,6 +76,8 @@ int main(int argc, char** argv) {
             editorMode = true;
         } else if (arg == "--project-manager") {
             editorMode = false;
+        } else if (arg == "--screenshot" && i + 1 < argc) {
+            screenshotPath = argv[++i];
         }
     }
 
@@ -106,6 +109,10 @@ int main(int argc, char** argv) {
     // Splash phase (editor mode only).
     constexpr f32 kSplashDuration = 1.6f;
     f32 splashTime = 0.0f;
+    // For a screenshot, skip the splash and capture after the UI settles.
+    if (!screenshotPath.empty()) splashTime = kSplashDuration;
+    int frameCount = 0;
+    const int kCaptureFrame = 30;
 
     LUMA_LOG_INFO("Editor", "starting in {} mode",
                   editorMode ? "editor" : "project-browser");
@@ -147,7 +154,16 @@ int main(int argc, char** argv) {
         }
 
         renderer->DrawUI(ui.EndFrame());
+
+        if (!screenshotPath.empty() && frameCount == kCaptureFrame) {
+            renderer->CaptureFrame(screenshotPath);
+        }
         renderer->EndFrame();
+
+        if (!screenshotPath.empty() && frameCount >= kCaptureFrame) {
+            running = false;  // captured; exit
+        }
+        ++frameCount;
     }
 
     renderer->WaitIdle();

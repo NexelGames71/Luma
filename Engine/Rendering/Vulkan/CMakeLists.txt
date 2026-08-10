@@ -41,7 +41,8 @@ add_dependencies(LumaRenderVulkan LumaShaders)
 
 target_include_directories(LumaRenderVulkan
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${PROJECT_SOURCE_DIR}/ThirdParty/stb)
 
 target_link_libraries(LumaRenderVulkan
     PUBLIC Luma::Core Luma::RHI Luma::Platform
