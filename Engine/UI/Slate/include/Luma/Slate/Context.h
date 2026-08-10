@@ -84,6 +84,11 @@ public:
                    std::string_view placeholder = {});
     bool Card(u64 id, const Rect& rect, std::string_view title,
               std::string_view desc, bool selected);
+    // A selectable card whose content is a single image (e.g. a template
+    // thumbnail); shows a selection/hover border.
+    bool ImageCard(u64 id, const Rect& rect, TextureHandle image, bool selected);
+    // A button showing a centered icon.
+    bool IconButton(u64 id, const Rect& rect, TextureHandle icon);
     bool Checkbox(u64 id, const Rect& box, std::string_view label, bool& value);
     // A collapsible section header; toggles `open` when clicked.
     bool CollapsingHeader(u64 id, const Rect& rect, std::string_view label,

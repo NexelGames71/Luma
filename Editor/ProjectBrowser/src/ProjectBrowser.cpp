@@ -178,14 +178,19 @@ void ProjectBrowser::DrawNewProject(Slate::Context& ui, const Rect& content,
     const auto& templates = Templates();
     f32 gap = 16.0f;
     f32 cardW = (fieldW - gap * 3) / 4.0f;
-    f32 cardH = 150.0f;
+    f32 cardH = cardW / 1.5f;  // template thumbnails are ~3:2
     for (usize i = 0; i < templates.size(); ++i) {
         Rect card{x + static_cast<f32>(i) * (cardW + gap), y, cardW, cardH};
         bool selected = m_template == templates[i].value;
-        if (ui.Card(Slate::Context::ID(templates[i].title), card,
-                    templates[i].title, templates[i].desc, selected)) {
-            m_template = templates[i].value;
-        }
+        const Slate::Image& thumb =
+            m_thumbnails[static_cast<usize>(templates[i].value)];
+        bool clicked =
+            thumb.Valid()
+                ? ui.ImageCard(Slate::Context::ID(templates[i].title), card,
+                               thumb.texture, selected)
+                : ui.Card(Slate::Context::ID(templates[i].title), card,
+                          templates[i].title, templates[i].desc, selected);
+        if (clicked) m_template = templates[i].value;
     }
     y += cardH + 28.0f;
 

@@ -36,12 +36,15 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     std::string name = m_project ? m_project->Name() : "(no project)";
     ui.LabelIn({width - 320, 0, 308, 32}, name, t.textDim, Align::Right);
 
-    // Toolbar (play controls placeholder).
+    // Toolbar (play controls).
     Rect toolbar{0, 32, width, 36};
     ui.Panel(toolbar, Color::RGB(28, 31, 37));
-    ui.Button(Slate::Context::ID("play"), {width / 2 - 40, 36, 36, 28}, ">");
-    ui.Button(Slate::Context::ID("pause"), {width / 2, 36, 36, 28}, "||");
-    ui.Button(Slate::Context::ID("stop"), {width / 2 + 40, 36, 36, 28}, "[]");
+    ui.IconButton(Slate::Context::ID("play"), {width / 2 - 46, 35, 30, 28},
+                  m_iconPlay);
+    ui.IconButton(Slate::Context::ID("pause"), {width / 2 - 14, 35, 30, 28},
+                  m_iconPause);
+    ui.IconButton(Slate::Context::ID("stop"), {width / 2 + 18, 35, 30, 28},
+                  m_iconStop);
 
     // Dockable layout: split the workspace with draggable splitters.
     f32 top = 68.0f;

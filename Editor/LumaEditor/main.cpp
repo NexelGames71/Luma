@@ -135,11 +135,42 @@ int main(int argc, char** argv) {
     window->SetEventCallback(
         [&](Event& e) { FeedEvent(ui, e, running); });
 
+    // Template thumbnails.
     ProjectBrowser browser;
     browser.SetLogo(logo);
+    struct TemplateAsset {
+        GameTemplate value;
+        const char* file;
+    };
+    const TemplateAsset kTemplateAssets[] = {
+        {GameTemplate::Empty, "Templates/Empty.png"},
+        {GameTemplate::FirstPerson, "Templates/FirstPerson.png"},
+        {GameTemplate::ThirdPerson, "Templates/ThirdPerson.png"},
+        {GameTemplate::TopDown, "Templates/TopDown.png"},
+    };
+    for (const TemplateAsset& asset : kTemplateAssets) {
+        std::string path = FindEditorAsset(asset.file);
+        if (!path.empty()) {
+            browser.SetTemplateThumbnail(asset.value,
+                                         Slate::LoadImage(*renderer, path));
+        }
+    }
+
+    // Editor toolbar icons.
+    auto loadIcon = [&](const char* file) -> TextureHandle {
+        std::string path = FindEditorAsset(file);
+        return path.empty() ? 0 : Slate::LoadImage(*renderer, path).texture;
+    };
+    TextureHandle iconPlay = loadIcon("Icons/play.png");
+    TextureHandle iconPause = loadIcon("Icons/pause.png");
+    TextureHandle iconStop = loadIcon("Icons/stop.png");
+
     std::unique_ptr<EditorScreen> editor;
     SplashScreen splash;
-    if (editorMode) editor = std::make_unique<EditorScreen>(projectFile);
+    if (editorMode) {
+        editor = std::make_unique<EditorScreen>(projectFile);
+        editor->SetToolbarIcons(iconPlay, iconPause, iconStop);
+    }
 
     // Splash phase (editor mode only).
     constexpr f32 kSplashDuration = 1.6f;

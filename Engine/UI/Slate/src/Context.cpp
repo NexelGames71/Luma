@@ -322,6 +322,54 @@ bool Context::Card(u64 id, const Rect& rect, std::string_view title,
     return clicked;
 }
 
+bool Context::ImageCard(u64 id, const Rect& rect, TextureHandle image,
+                        bool selected) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) m_hot = id;
+    bool clicked = false;
+    if (hovered && m_mousePressed[0]) m_active = id;
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) clicked = true;
+        m_active = 0;
+    }
+
+    Color border = selected ? m_theme.accent
+                            : (hovered ? m_theme.textDim : m_theme.panelBorder);
+    f32 t = selected ? 3.0f : 1.0f;
+    m_draw.AddRectFilledRounded(rect, border, m_theme.rounding);
+    if (image) {
+        m_draw.AddImage(image, rect.Inset(t, t), Rect{0.0f, 0.0f, 1.0f, 1.0f},
+                        Color::RGB(255, 255, 255));
+    } else {
+        m_draw.AddRectFilledRounded(rect.Inset(t, t), m_theme.cardBg,
+                                    m_theme.rounding - t);
+    }
+    return clicked;
+}
+
+bool Context::IconButton(u64 id, const Rect& rect, TextureHandle icon) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) m_hot = id;
+    bool clicked = false;
+    if (hovered && m_mousePressed[0]) m_active = id;
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) clicked = true;
+        m_active = 0;
+    }
+    Color bg = m_theme.button;
+    if (m_active == id) bg = m_theme.buttonActive;
+    else if (hovered) bg = m_theme.buttonHover;
+    m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
+    if (icon) {
+        f32 s = std::min(rect.w, rect.h) - 10.0f;
+        Rect ir{rect.x + (rect.w - s) * 0.5f, rect.y + (rect.h - s) * 0.5f, s,
+                s};
+        m_draw.AddImage(icon, ir, Rect{0.0f, 0.0f, 1.0f, 1.0f},
+                        Color::RGB(255, 255, 255));
+    }
+    return clicked;
+}
+
 bool Context::Checkbox(u64 id, const Rect& box, std::string_view label,
                        bool& value) {
     // Clickable region spans the box plus the label.

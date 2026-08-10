@@ -22,6 +22,13 @@ public:
     Slate::Rect ViewportRect() const { return m_viewportRect; }
     void SetViewportTexture(TextureHandle texture) { m_viewport = texture; }
 
+    void SetToolbarIcons(TextureHandle play, TextureHandle pause,
+                         TextureHandle stop) {
+        m_iconPlay = play;
+        m_iconPause = pause;
+        m_iconStop = stop;
+    }
+
 private:
     std::optional<Project> m_project;
     std::string m_title;
@@ -33,6 +40,9 @@ private:
 
     Slate::Rect m_viewportRect{};
     TextureHandle m_viewport = 0;
+    TextureHandle m_iconPlay = 0;
+    TextureHandle m_iconPause = 0;
+    TextureHandle m_iconStop = 0;
 };
 
 }  // namespace Luma

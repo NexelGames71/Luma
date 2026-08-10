@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -26,6 +27,11 @@ public:
 
     // Optional banner logo (loaded by the app).
     void SetLogo(const Slate::Image& logo) { m_logo = logo; }
+
+    // Template thumbnails, indexed by GameTemplate.
+    void SetTemplateThumbnail(GameTemplate tmpl, const Slate::Image& image) {
+        m_thumbnails[static_cast<usize>(tmpl)] = image;
+    }
 
     BrowserResult Draw(Slate::Context& ui, f32 width, f32 height);
 
@@ -61,6 +67,7 @@ private:
     bool m_scanned = false;
 
     Slate::Image m_logo;
+    std::array<Slate::Image, 4> m_thumbnails;
 };
 
 }  // namespace Luma
