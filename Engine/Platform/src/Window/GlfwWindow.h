@@ -24,6 +24,7 @@ public:
 
     u32 Width() const override { return m_data.width; }
     u32 Height() const override { return m_data.height; }
+    void SetIcon(u32 width, u32 height, const void* rgba8Pixels) override;
     void* NativeHandle() const override;
 
     std::vector<const char*> RequiredVulkanInstanceExtensions() const override;

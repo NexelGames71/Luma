@@ -75,19 +75,26 @@ BrowserResult ProjectBrowser::Draw(Slate::Context& ui, f32 width, f32 height) {
 
     ui.Panel({0, 0, width, height}, t.windowBg);
 
-    // Banner: gradient + gem logo + wordmark.
-    Rect banner{0, 0, width, 80};
-    ui.GradientRect(banner, Color::RGB(30, 36, 52), Color::RGB(16, 18, 24));
-    ui.LogoMark({44, 40}, 20.0f);
-    ui.LabelIn({76, 10, 320, 42}, "LUMA", t.accentText, Align::Left, true);
-    ui.LabelIn({78, 50, 320, 20}, "ENGINE", t.textDim, Align::Left);
-    ui.LabelIn({0, 0, width - 24, 80}, "Project Browser", t.textDim,
+    // Banner: subtle gradient with the Luma logo (image if available).
+    Rect banner{0, 0, width, 84};
+    ui.GradientRect(banner, Color::RGB(28, 33, 46), Color::RGB(18, 20, 26));
+    if (m_logo.Valid()) {
+        f32 h = 56.0f;
+        f32 w = h * m_logo.ContentAspect();
+        ui.ImageUV(m_logo.texture, {24, (84 - h) * 0.5f, w, h},
+                   m_logo.contentUV);
+    } else {
+        ui.LogoMark({40, 42}, 20.0f);
+        ui.LabelIn({70, 12, 320, 42}, "LUMA", t.accentText, Align::Left, true);
+        ui.LabelIn({72, 52, 320, 20}, "ENGINE", t.textDim, Align::Left);
+    }
+    ui.LabelIn({0, 0, width - 24, 84}, "Project Browser", t.textDim,
                Align::Right);
 
     // Tabs.
     const char* tabNames[] = {"Your Projects", "New Project", "About"};
     const f32 tabW = 150.0f;
-    const f32 tabY = 80.0f;
+    const f32 tabY = 84.0f;
     for (int i = 0; i < 3; ++i) {
         Rect r{24 + i * tabW, tabY, tabW, 40};
         if (ui.Tab(Slate::Context::ID(tabNames[i]), r, tabNames[i],
@@ -95,13 +102,15 @@ BrowserResult ProjectBrowser::Draw(Slate::Context& ui, f32 width, f32 height) {
             m_tab = i;
         }
     }
+    // Thin divider under the tab row instead of a heavy content box.
+    ui.Panel({0, tabY + 40, width, 1}, t.panelBorder);
 
     const f32 footerH = 60.0f;
     const f32 setupH = 34.0f;
     const f32 setupY = height - footerH - setupH;
-    const f32 contentTop = tabY + 40.0f + 8.0f;
-    Rect content{24, contentTop, width - 48, setupY - contentTop - 8.0f};
-    ui.PanelBordered(content, t.panelBg, t.panelBorder, 1.0f);
+    const f32 contentTop = tabY + 40.0f + 20.0f;
+    // Content sits directly on the window background (no bordered box).
+    Rect content{40, contentTop, width - 80, setupY - contentTop - 12.0f};
 
     if (m_tab == 0) DrawYourProjects(ui, content, result);
     else if (m_tab == 1) DrawNewProject(ui, content, result);

@@ -35,6 +35,9 @@ public:
     virtual u32 Width() const = 0;
     virtual u32 Height() const = 0;
 
+    // Sets the window/taskbar icon from tightly-packed RGBA8 pixels.
+    virtual void SetIcon(u32 width, u32 height, const void* rgba8Pixels) = 0;
+
     // Native OS handle (GLFWwindow* today) for interop; nullptr if unavailable.
     virtual void* NativeHandle() const = 0;
 

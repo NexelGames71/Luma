@@ -13,6 +13,7 @@
 #include "Luma/RHI/Renderer.h"
 #include "Luma/RHI/VulkanRenderer.h"
 #include "Luma/Slate/Context.h"
+#include "Luma/Slate/Image.h"
 
 #include "EditorScreen.h"
 #include "SplashScreen.h"
@@ -22,6 +23,19 @@ using namespace Luma;
 namespace {
 
 constexpr const char* kFontPath = "C:/Windows/Fonts/segoeui.ttf";
+
+// Finds an editor asset (e.g. logo) by searching Content/Editor upward from the
+// working directory.
+std::string FindEditorAsset(const std::string& file) {
+    const char* prefixes[] = {"Content/Editor/", "../Content/Editor/",
+                              "../../Content/Editor/",
+                              "../../../Content/Editor/"};
+    for (const char* p : prefixes) {
+        std::string candidate = std::string(p) + file;
+        if (std::filesystem::exists(candidate)) return candidate;
+    }
+    return {};
+}
 
 // Feeds a window event into the Slate context (and reports window close).
 void FeedEvent(Slate::Context& ui, Event& e, bool& running) {
@@ -97,11 +111,29 @@ int main(int argc, char** argv) {
         LUMA_LOG_ERROR("Editor", "failed to load UI font");
     }
 
+    // Window icon from the engine icon asset.
+    {
+        std::string iconPath = FindEditorAsset("luma_icon.png");
+        u32 iw = 0, ih = 0;
+        std::vector<u8> iconPixels;
+        if (!iconPath.empty() &&
+            Slate::LoadImagePixels(iconPath, iw, ih, iconPixels)) {
+            window->SetIcon(iw, ih, iconPixels.data());
+        }
+    }
+    // Logo for the banner / splash.
+    Slate::Image logo = {};
+    {
+        std::string logoPath = FindEditorAsset("luma_logo.png");
+        if (!logoPath.empty()) logo = Slate::LoadImage(*renderer, logoPath);
+    }
+
     bool running = true;
     window->SetEventCallback(
         [&](Event& e) { FeedEvent(ui, e, running); });
 
     ProjectBrowser browser;
+    browser.SetLogo(logo);
     std::unique_ptr<EditorScreen> editor;
     SplashScreen splash;
     if (editorMode) editor = std::make_unique<EditorScreen>(projectFile);
@@ -137,7 +169,7 @@ int main(int argc, char** argv) {
                 if (progress < 0.3f) msg = "Initializing Vulkan...";
                 else if (progress < 0.6f) msg = "Loading project...";
                 else if (progress < 0.85f) msg = "Compiling shaders...";
-                splash.Draw(ui, w, h, progress, msg);
+                splash.Draw(ui, w, h, progress, msg, logo);
             } else {
                 editor->Draw(ui, w, h);
             }

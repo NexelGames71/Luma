@@ -6,15 +6,23 @@ using Slate::Color;
 using Slate::Rect;
 
 void SplashScreen::Draw(Slate::Context& ui, f32 width, f32 height, f32 progress,
-                        std::string_view message) {
+                        std::string_view message, const Slate::Image& logo) {
     Slate::Theme& t = ui.theme();
-    ui.Panel({0, 0, width, height}, Color::RGB(16, 18, 22));
+    ui.GradientRect({0, 0, width, height}, Color::RGB(20, 23, 32),
+                    Color::RGB(12, 13, 17));
 
-    // Wordmark centered.
-    ui.LabelIn({0, height * 0.5f - 90, width, 60}, "LUMA", t.accentText,
-               Align::Center, true);
-    ui.LabelIn({0, height * 0.5f - 40, width, 28}, "ENGINE", t.textDim,
-               Align::Center);
+    if (logo.Valid()) {
+        f32 lw = width * 0.42f;
+        f32 lh = lw / logo.ContentAspect();
+        ui.ImageUV(logo.texture,
+                   {(width - lw) * 0.5f, height * 0.5f - lh - 6.0f, lw, lh},
+                   logo.contentUV);
+    } else {
+        ui.LabelIn({0, height * 0.5f - 90, width, 60}, "LUMA", t.accentText,
+                   Align::Center, true);
+        ui.LabelIn({0, height * 0.5f - 40, width, 28}, "ENGINE", t.textDim,
+                   Align::Center);
+    }
 
     // Progress bar.
     f32 barW = width * 0.5f;

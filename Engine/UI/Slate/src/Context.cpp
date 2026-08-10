@@ -1,5 +1,6 @@
 #include "Luma/Slate/Context.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace Luma::Slate {
@@ -141,6 +142,15 @@ void Context::LogoMark(Vec2 center, f32 radius) {
     m_draw.AddTriangle(right, bottom, center, b);
     m_draw.AddTriangle(bottom, left, center, d);
     m_draw.AddTriangle(left, top, center, c);
+}
+
+void Context::Image(TextureHandle texture, const Rect& rect, Color tint) {
+    m_draw.AddImage(texture, rect, Rect{0.0f, 0.0f, 1.0f, 1.0f}, tint);
+}
+
+void Context::ImageUV(TextureHandle texture, const Rect& rect, const Rect& uv,
+                      Color tint) {
+    m_draw.AddImage(texture, rect, uv, tint);
 }
 
 void Context::Label(Vec2 pos, std::string_view text, Color color) {
@@ -350,6 +360,71 @@ bool Context::CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
                            rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
                    label, m_theme.text);
     return clicked;
+}
+
+bool Context::SplitterV(u64 id, const Rect& region, f32& ratio, Rect& left,
+                        Rect& right, f32 thickness) {
+    f32 splitX = region.x + region.w * ratio;
+    Rect bar{splitX - thickness * 0.5f, region.y, thickness, region.h};
+    bool hovered = bar.Contains(m_mouse);
+    if (hovered) m_hot = id;
+    if (hovered && m_mousePressed[0]) m_active = id;
+
+    bool dragging = (m_active == id);
+    if (dragging) {
+        if (!m_mouseDown[0]) {
+            m_active = 0;
+        } else if (region.w > 1.0f) {
+            ratio = std::clamp((m_mouse.x - region.x) / region.w, 0.12f, 0.88f);
+            splitX = region.x + region.w * ratio;
+            bar.x = splitX - thickness * 0.5f;
+        }
+    }
+
+    left = {region.x, region.y, splitX - thickness * 0.5f - region.x, region.h};
+    right = {splitX + thickness * 0.5f, region.y,
+             region.Right() - (splitX + thickness * 0.5f), region.h};
+    m_draw.AddRectFilled(bar, (dragging || hovered) ? m_theme.accent
+                                                    : m_theme.windowBg);
+    return dragging;
+}
+
+bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
+                        Rect& bottom, f32 thickness) {
+    f32 splitY = region.y + region.h * ratio;
+    Rect bar{region.x, splitY - thickness * 0.5f, region.w, thickness};
+    bool hovered = bar.Contains(m_mouse);
+    if (hovered) m_hot = id;
+    if (hovered && m_mousePressed[0]) m_active = id;
+
+    bool dragging = (m_active == id);
+    if (dragging) {
+        if (!m_mouseDown[0]) {
+            m_active = 0;
+        } else if (region.h > 1.0f) {
+            ratio = std::clamp((m_mouse.y - region.y) / region.h, 0.12f, 0.88f);
+            splitY = region.y + region.h * ratio;
+            bar.y = splitY - thickness * 0.5f;
+        }
+    }
+
+    top = {region.x, region.y, region.w, splitY - thickness * 0.5f - region.y};
+    bottom = {region.x, splitY + thickness * 0.5f, region.w,
+              region.Bottom() - (splitY + thickness * 0.5f)};
+    m_draw.AddRectFilled(bar, (dragging || hovered) ? m_theme.accent
+                                                    : m_theme.windowBg);
+    return dragging;
+}
+
+Rect Context::PanelWithTitle(const Rect& rect, std::string_view title) {
+    m_draw.AddRectFilled(rect, m_theme.panelBg);
+    Rect titleBar{rect.x, rect.y, rect.w, 26.0f};
+    m_draw.AddRectFilled(titleBar, m_theme.header);
+    m_draw.AddText(m_font, {rect.x + 10.0f,
+                           titleBar.y + (26.0f - m_font.LineHeight()) * 0.5f},
+                   title, m_theme.text);
+    m_draw.AddRectOutline(rect, m_theme.panelBorder, 1.0f);
+    return Rect{rect.x, rect.y + 26.0f, rect.w, rect.h - 26.0f};
 }
 
 }  // namespace Luma::Slate

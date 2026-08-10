@@ -166,6 +166,16 @@ bool GlfwWindow::ShouldClose() const {
     return m_window ? glfwWindowShouldClose(m_window) != 0 : true;
 }
 
+void GlfwWindow::SetIcon(u32 width, u32 height, const void* rgba8Pixels) {
+    if (!m_window || !rgba8Pixels) return;
+    GLFWimage image;
+    image.width = static_cast<int>(width);
+    image.height = static_cast<int>(height);
+    image.pixels = static_cast<unsigned char*>(
+        const_cast<void*>(rgba8Pixels));
+    glfwSetWindowIcon(m_window, 1, &image);
+}
+
 void* GlfwWindow::NativeHandle() const { return m_window; }
 
 std::vector<const char*> GlfwWindow::RequiredVulkanInstanceExtensions() const {

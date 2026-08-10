@@ -63,6 +63,10 @@ public:
                        f32 thickness = 1.0f);
     void GradientRect(const Rect& rect, Color top, Color bottom);
     void Triangle(Vec2 a, Vec2 b, Vec2 c, Color color);
+    void Image(TextureHandle texture, const Rect& rect,
+               Color tint = Color::RGB(255, 255, 255));
+    void ImageUV(TextureHandle texture, const Rect& rect, const Rect& uv,
+                 Color tint = Color::RGB(255, 255, 255));
     // Draws the Luma gem/prism logo mark centered at `center`.
     void LogoMark(Vec2 center, f32 radius);
     void Label(Vec2 pos, std::string_view text, Color color);
@@ -78,6 +82,17 @@ public:
     // A collapsible section header; toggles `open` when clicked.
     bool CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
                           bool& open);
+
+    // --- Docking primitives -------------------------------------------------
+    // Splits `region` by `ratio` (0..1) with a draggable divider. Outputs the
+    // two sub-regions; updates `ratio` while dragging. Returns true if dragging.
+    bool SplitterV(u64 id, const Rect& region, f32& ratio, Rect& left,
+                   Rect& right, f32 thickness = 6.0f);
+    bool SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
+                   Rect& bottom, f32 thickness = 6.0f);
+    // Draws a docked panel (background, title bar, border); returns the content
+    // rect below the title bar.
+    Rect PanelWithTitle(const Rect& rect, std::string_view title);
 
     Theme& theme() { return m_theme; }
     Font& font() { return m_font; }

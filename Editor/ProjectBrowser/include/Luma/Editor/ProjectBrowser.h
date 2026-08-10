@@ -6,6 +6,7 @@
 
 #include "Luma/Project/Project.h"
 #include "Luma/Slate/Context.h"
+#include "Luma/Slate/Image.h"
 
 namespace Luma {
 
@@ -22,6 +23,9 @@ struct BrowserResult {
 class ProjectBrowser {
 public:
     ProjectBrowser();
+
+    // Optional banner logo (loaded by the app).
+    void SetLogo(const Slate::Image& logo) { m_logo = logo; }
 
     BrowserResult Draw(Slate::Context& ui, f32 width, f32 height);
 
@@ -55,6 +59,8 @@ private:
 
     std::vector<ProjectEntry> m_projects;
     bool m_scanned = false;
+
+    Slate::Image m_logo;
 };
 
 }  // namespace Luma
