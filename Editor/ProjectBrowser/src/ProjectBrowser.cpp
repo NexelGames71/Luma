@@ -213,7 +213,8 @@ void ProjectBrowser::DrawYourProjects(Slate::Context& ui, const Rect& content,
     for (const ProjectEntry& entry : m_projects) {
         Rect row{x, y, rowW, 56};
         bool hovered = row.Contains(ui.mouse());
-        ui.PanelBordered(row, hovered ? t.cardHover : t.cardBg, t.panelBorder);
+        ui.PanelRoundedBordered(row, hovered ? t.cardHover : t.cardBg,
+                                t.panelBorder, t.rounding);
         ui.LabelIn({row.x + 16, row.y, rowW - 200, 56}, entry.name, t.text);
         ui.LabelIn({row.x + 16, row.y + 26, rowW - 200, 26},
                    entry.file.string(), t.textDim);

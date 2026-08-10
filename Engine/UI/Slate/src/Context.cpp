@@ -37,6 +37,7 @@ Theme DarkTheme() {
     t.cardHover = Color::RGB(46, 51, 61);
     t.cardSelected = Color::RGB(30, 78, 120);
     t.caret = Color::RGB(230, 233, 240);
+    t.rounding = 6.0f;
     return t;
 }
 
@@ -118,6 +119,17 @@ void Context::PanelBordered(const Rect& rect, Color fill, Color border,
     m_draw.AddRectOutline(rect, border, thickness);
 }
 
+void Context::PanelRounded(const Rect& rect, Color color, f32 radius) {
+    m_draw.AddRectFilledRounded(rect, color, radius);
+}
+
+void Context::PanelRoundedBordered(const Rect& rect, Color fill, Color border,
+                                   f32 radius, f32 thickness) {
+    m_draw.AddRectFilledRounded(rect, border, radius);
+    m_draw.AddRectFilledRounded(rect.Inset(thickness, thickness), fill,
+                                radius - thickness);
+}
+
 void Context::GradientRect(const Rect& rect, Color top, Color bottom) {
     m_draw.AddRectFilledGradient(rect, top, bottom);
 }
@@ -183,7 +195,7 @@ bool Context::Button(u64 id, const Rect& rect, std::string_view label) {
     Color bg = m_theme.button;
     if (m_active == id) bg = m_theme.buttonActive;
     else if (hovered) bg = m_theme.buttonHover;
-    m_draw.AddRectFilled(rect, bg);
+    m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
 
     Vec2 size = m_font.Measure(label);
     Vec2 pos{rect.x + (rect.w - size.x) * 0.5f,
@@ -205,9 +217,12 @@ bool Context::Tab(u64 id, const Rect& rect, std::string_view label,
 
     Color bg = active ? m_theme.panelBg : (hovered ? m_theme.buttonHover
                                                     : m_theme.header);
-    m_draw.AddRectFilled(rect, bg);
+    if (active || hovered) {
+        m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
+    }
     if (active) {
-        m_draw.AddRectFilled({rect.x, rect.Bottom() - 2.0f, rect.w, 2.0f},
+        m_draw.AddRectFilled({rect.x + 14.0f, rect.Bottom() - 2.0f,
+                              rect.w - 28.0f, 2.0f},
                              m_theme.accent);
     }
     Vec2 size = m_font.Measure(label);
@@ -254,9 +269,10 @@ bool Context::TextField(u64 id, const Rect& rect, std::string& text,
         if (m_keyEnd) m_caret = text.size();
     }
 
-    m_draw.AddRectFilled(rect, m_theme.fieldBg);
     Color border = (m_focus == id) ? m_theme.accent : m_theme.fieldBorder;
-    m_draw.AddRectOutline(rect, border, 1.0f);
+    m_draw.AddRectFilledRounded(rect, border, m_theme.rounding);
+    m_draw.AddRectFilledRounded(rect.Inset(1.0f, 1.0f), m_theme.fieldBg,
+                                m_theme.rounding - 1.0f);
 
     Vec2 tp{rect.x + 8.0f, rect.y + (rect.h - m_font.LineHeight()) * 0.5f};
     m_draw.PushClip({rect.x + 4.0f, rect.y, rect.w - 8.0f, rect.h});
@@ -288,9 +304,10 @@ bool Context::Card(u64 id, const Rect& rect, std::string_view title,
 
     Color bg = selected ? m_theme.cardSelected
                         : (hovered ? m_theme.cardHover : m_theme.cardBg);
-    m_draw.AddRectFilled(rect, bg);
-    m_draw.AddRectOutline(rect, selected ? m_theme.accent : m_theme.panelBorder,
-                          selected ? 2.0f : 1.0f);
+    Color border = selected ? m_theme.accent : m_theme.panelBorder;
+    f32 t = selected ? 2.0f : 1.0f;
+    m_draw.AddRectFilledRounded(rect, border, m_theme.rounding);
+    m_draw.AddRectFilledRounded(rect.Inset(t, t), bg, m_theme.rounding - t);
 
     m_draw.PushClip(rect.Inset(10.0f, 8.0f));
     Color titleColor = selected ? m_theme.accentText : m_theme.text;
@@ -345,7 +362,8 @@ bool Context::CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
         m_active = 0;
     }
 
-    m_draw.AddRectFilled(rect, hovered ? m_theme.buttonHover : m_theme.button);
+    m_draw.AddRectFilledRounded(
+        rect, hovered ? m_theme.buttonHover : m_theme.button, m_theme.rounding);
     // Disclosure triangle.
     f32 cy = rect.y + rect.h * 0.5f;
     f32 cx = rect.x + 14.0f;
@@ -417,14 +435,17 @@ bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
 }
 
 Rect Context::PanelWithTitle(const Rect& rect, std::string_view title) {
-    m_draw.AddRectFilled(rect, m_theme.panelBg);
-    Rect titleBar{rect.x, rect.y, rect.w, 26.0f};
-    m_draw.AddRectFilled(titleBar, m_theme.header);
-    m_draw.AddText(m_font, {rect.x + 10.0f,
-                           titleBar.y + (26.0f - m_font.LineHeight()) * 0.5f},
+    f32 r = m_theme.rounding;
+    m_draw.AddRectFilledRounded(rect, m_theme.panelBorder, r);
+    m_draw.AddRectFilledRounded(rect.Inset(1.0f, 1.0f), m_theme.panelBg,
+                                r - 1.0f);
+    m_draw.AddText(m_font,
+                   {rect.x + 12.0f, rect.y + (28.0f - m_font.LineHeight()) * 0.5f},
                    title, m_theme.text);
-    m_draw.AddRectOutline(rect, m_theme.panelBorder, 1.0f);
-    return Rect{rect.x, rect.y + 26.0f, rect.w, rect.h - 26.0f};
+    // Divider under the title.
+    m_draw.AddRectFilled({rect.x + 8.0f, rect.y + 28.0f, rect.w - 16.0f, 1.0f},
+                         m_theme.panelBorder);
+    return Rect{rect.x, rect.y + 29.0f, rect.w, rect.h - 29.0f};
 }
 
 }  // namespace Luma::Slate

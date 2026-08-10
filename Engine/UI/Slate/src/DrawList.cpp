@@ -1,6 +1,13 @@
 #include "Luma/Slate/DrawList.h"
 
+#include <algorithm>
+#include <cmath>
+#include <vector>
+
 namespace Luma::Slate {
+namespace {
+constexpr f32 kPi = 3.14159265358979323846f;
+}  // namespace
 
 void DrawList::Begin(f32 displayWidth, f32 displayHeight) {
     m_vertices.clear();
@@ -62,6 +69,49 @@ void DrawList::AddQuad(TextureHandle texture, const Rect& dst, const Rect& uv,
 void DrawList::AddRectFilled(const Rect& rect, Color color) {
     // texture 0 = the backend's 1x1 white texture.
     AddQuad(0, rect, Rect{0.0f, 0.0f, 1.0f, 1.0f}, color);
+}
+
+void DrawList::AddConvexPolyFilled(const Vec2* points, int count, Color color) {
+    if (count < 3) return;
+    EnsureCommand(0);
+    u32 base = static_cast<u32>(m_vertices.size());
+    u32 packed = color.Packed();
+    for (int i = 0; i < count; ++i) {
+        m_vertices.push_back({points[i].x, points[i].y, 0.5f, 0.5f, packed});
+    }
+    for (int i = 1; i < count - 1; ++i) {
+        m_indices.push_back(base);
+        m_indices.push_back(base + static_cast<u32>(i));
+        m_indices.push_back(base + static_cast<u32>(i + 1));
+    }
+    m_commands.back().indexCount += static_cast<u32>((count - 2) * 3);
+}
+
+void DrawList::AddRectFilledRounded(const Rect& rect, Color color,
+                                    f32 radius) {
+    f32 r = std::min(radius, std::min(rect.w, rect.h) * 0.5f);
+    if (r <= 0.75f) {
+        AddRectFilled(rect, color);
+        return;
+    }
+    constexpr int kSeg = 5;  // points per corner arc
+    std::vector<Vec2> pts;
+    pts.reserve((kSeg + 1) * 4);
+    Vec2 tl{rect.x + r, rect.y + r};
+    Vec2 tr{rect.Right() - r, rect.y + r};
+    Vec2 br{rect.Right() - r, rect.Bottom() - r};
+    Vec2 bl{rect.x + r, rect.Bottom() - r};
+    auto arc = [&](Vec2 c, f32 a0, f32 a1) {
+        for (int i = 0; i <= kSeg; ++i) {
+            f32 a = a0 + (a1 - a0) * (static_cast<f32>(i) / kSeg);
+            pts.push_back({c.x + std::cos(a) * r, c.y + std::sin(a) * r});
+        }
+    };
+    arc(tl, kPi, kPi * 1.5f);
+    arc(tr, kPi * 1.5f, kPi * 2.0f);
+    arc(br, 0.0f, kPi * 0.5f);
+    arc(bl, kPi * 0.5f, kPi);
+    AddConvexPolyFilled(pts.data(), static_cast<int>(pts.size()), color);
 }
 
 void DrawList::AddRectFilledGradient(const Rect& rect, Color top,

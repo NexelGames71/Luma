@@ -19,8 +19,10 @@ public:
     void PopClip();
 
     void AddRectFilled(const Rect& rect, Color color);
+    void AddRectFilledRounded(const Rect& rect, Color color, f32 radius);
     void AddRectFilledGradient(const Rect& rect, Color top, Color bottom);
     void AddRectOutline(const Rect& rect, Color color, f32 thickness = 1.0f);
+    void AddConvexPolyFilled(const Vec2* points, int count, Color color);
     void AddTriangle(Vec2 a, Vec2 b, Vec2 c, Color color);
     void AddImage(TextureHandle texture, const Rect& dst, const Rect& uv,
                   Color tint);

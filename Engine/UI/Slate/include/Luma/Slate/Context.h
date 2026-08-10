@@ -33,6 +33,7 @@ struct Theme {
     Color cardHover;
     Color cardSelected;
     Color caret;
+    f32 rounding = 6.0f;
 };
 
 Theme DarkTheme();
@@ -61,6 +62,9 @@ public:
     void Panel(const Rect& rect, Color color);
     void PanelBordered(const Rect& rect, Color fill, Color border,
                        f32 thickness = 1.0f);
+    void PanelRounded(const Rect& rect, Color color, f32 radius);
+    void PanelRoundedBordered(const Rect& rect, Color fill, Color border,
+                              f32 radius, f32 thickness = 1.0f);
     void GradientRect(const Rect& rect, Color top, Color bottom);
     void Triangle(Vec2 a, Vec2 b, Vec2 c, Color color);
     void Image(TextureHandle texture, const Rect& rect,
