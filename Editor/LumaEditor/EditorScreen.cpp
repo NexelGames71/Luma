@@ -62,23 +62,7 @@ SceneView EditorScreen::BuildSceneView() {
     m_view = LookAt(eye, m_camTarget, Vec3(0.0f, 1.0f, 0.0f));
     m_gizmoScale = m_camDistance * 0.14f;
 
-    // Infinite-looking grid: scale the cell size (power-of-10 LOD) and the fade
-    // radius with the camera distance, so the grid always fills the view and
-    // stays a clean readable density at any zoom, while line counts stay bounded.
-    GridConfig gc;
-    f32 k = m_camDistance;
-    f32 mag = std::pow(10.0f, std::floor(std::log10(std::max(k, 2.0f) / 6.0f)));
-    gc.spacing = std::clamp(mag, 0.1f, 1000.0f);
-    gc.segments = 28;
-    gc.minorFadeStart = 0.35f * k;
-    gc.minorFadeEnd = 2.2f * k;
-    gc.majorFadeStart = 1.3f * k;
-    gc.majorFadeEnd = 6.5f * k;
-    gc.axisFadeStart = 1.8f * k;
-    gc.axisFadeEnd = 7.5f * k;
-    gc.halfExtent =
-        static_cast<i32>(std::ceil(gc.majorFadeEnd / gc.spacing)) + gc.majorEvery;
-    m_grid.Build(m_camTarget, gc);
+    m_grid.Build(m_camTarget);
 
     // Entity instances.
     m_instances.clear();
