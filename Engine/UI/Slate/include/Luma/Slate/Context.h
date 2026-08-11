@@ -86,6 +86,8 @@ public:
     void Heading(const Rect& rect, std::string_view text, Color color,
                  Align align = Align::Left);
     bool Button(u64 id, const Rect& rect, std::string_view label);
+    // A flat menu-bar item: text only, with a rounded highlight on hover/press.
+    bool MenuButton(u64 id, const Rect& rect, std::string_view label);
     bool Tab(u64 id, const Rect& rect, std::string_view label, bool active);
     bool TextField(u64 id, const Rect& rect, std::string& text,
                    std::string_view placeholder = {});

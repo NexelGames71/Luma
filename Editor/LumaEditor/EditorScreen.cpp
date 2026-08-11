@@ -163,19 +163,32 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     if (!m_dockBuilt) BuildDock();
     ui.Panel({0, 0, width, height}, t.windowBg);
 
-    // Menu bar.
+    // Menu bar: [gem] Luma  File Edit Assets Window Help ............ project.
     Rect menu{0, 0, width, 32};
-    ui.GradientRect(menu, Color::RGB(44, 48, 57), Color::RGB(32, 35, 42));
-    const char* items[] = {"Luma", "File", "Edit", "Assets", "Window", "Help"};
-    f32 mx = 10.0f;
+    ui.GradientRect(menu, Color::RGB(46, 50, 60), Color::RGB(30, 33, 40));
+    ui.Panel({0, 31, width, 1}, Color::RGB(12, 13, 16));
+
+    // Brand: gem mark + wordmark.
+    ui.LogoMark({18, 16}, 8.0f);
+    ui.Heading({30, 0, 60, 32}, "Luma", Color::RGB(236, 240, 248));
+    f32 mx = 30.0f + ui.uiFont().Measure("Luma").x + 16.0f;
+
+    const char* items[] = {"File", "Edit", "Assets", "Window", "Help"};
     for (const char* item : items) {
         f32 w = ui.uiFont().Measure(item).x + 22.0f;
-        ui.Button(Slate::Context::ID(item), {mx, 3, w, 26}, item);
-        mx += w;
+        ui.MenuButton(Slate::Context::ID(item), {mx, 4, w, 24}, item);
+        mx += w + 2.0f;
     }
-    ui.Heading({width - 320, 0, 308, 32},
-               m_project ? m_project->Name() : "(no project)", t.textDim,
-               Align::Right);
+
+    // Project identity pill on the right (accent dot + name).
+    std::string projName = m_project ? m_project->Name() : "(no project)";
+    f32 nameW = ui.uiFont().Measure(projName).x;
+    f32 pillW = nameW + 34.0f;
+    Rect pill{width - pillW - 10.0f, 5, pillW, 22};
+    ui.PanelRoundedBordered(pill, Color::RGB(24, 26, 32),
+                            Color::RGB(52, 57, 67), 11.0f, 1.0f);
+    ui.PanelRounded({pill.x + 11.0f, pill.y + 7.0f, 7.0f, 7.0f}, t.accent, 3.5f);
+    ui.Heading({pill.x + 24.0f, pill.y, nameW + 8.0f, pill.h}, projName, t.text);
 
     // Toolbar.
     Rect toolbar{0, 32, width, 36};

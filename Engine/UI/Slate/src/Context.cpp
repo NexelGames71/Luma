@@ -233,6 +233,31 @@ bool Context::Button(u64 id, const Rect& rect, std::string_view label) {
     return clicked;
 }
 
+bool Context::MenuButton(u64 id, const Rect& rect, std::string_view label) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::Hand;
+    }
+    if (hovered && m_mousePressed[0]) m_active = id;
+    bool clicked = false;
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) clicked = true;
+        m_active = 0;
+    }
+    if (m_active == id) {
+        m_draw.AddRectFilledRounded(rect, m_theme.buttonActive, 5.0f);
+    } else if (hovered) {
+        m_draw.AddRectFilledRounded(rect, m_theme.buttonHover, 5.0f);
+    }
+    Vec2 size = m_uiFont.Measure(label);
+    Vec2 pos{rect.x + (rect.w - size.x) * 0.5f,
+             rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f};
+    m_draw.AddText(m_uiFont, pos, label,
+                   hovered ? m_theme.text : m_theme.buttonText);
+    return clicked;
+}
+
 bool Context::Tab(u64 id, const Rect& rect, std::string_view label,
                   bool active) {
     bool hovered = rect.Contains(m_mouse);
