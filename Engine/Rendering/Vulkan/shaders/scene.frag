@@ -1,19 +1,29 @@
 #version 450
 
-// Physically-based shading: Cook-Torrance direct lighting from the sun plus
-// image-based lighting (diffuse irradiance + specular reflection) sampled from
-// the procedural sky environment. Output is tonemapped + gamma-encoded to match
-// the sky pass on the UNORM target.
+// Physically-based shading: Cook-Torrance direct lighting from the sun and any
+// number of punctual lights (point/spot/directional) plus image-based lighting
+// (diffuse irradiance + specular reflection) from the procedural sky. Output is
+// tonemapped + gamma-encoded to match the sky pass on the UNORM target.
+
+const int MAX_LIGHTS = 16;
+
+struct Light {
+    vec4 posType;   // xyz = position, w = type (0 dir, 1 point, 2 spot)
+    vec4 dirRange;  // xyz = direction, w = range
+    vec4 color;     // rgb = color, w = intensity
+    vec4 spot;      // x = cosInner, y = cosOuter
+};
 
 layout(binding = 0) uniform SceneUBO {
     mat4 viewProj;
     vec4 camPos;
     vec4 sunDir;      // xyz dir TO sun
     vec4 sunColor;    // rgb, w = intensity
-    vec4 skyZenith;   // rgb IBL up
-    vec4 skyHorizon;  // rgb IBL horizon
-    vec4 groundColor; // rgb IBL down
-    vec4 params;      // x = iblIntensity
+    vec4 skyZenith;
+    vec4 skyHorizon;
+    vec4 groundColor;
+    vec4 params;      // x = iblIntensity, y = lightCount
+    Light lights[MAX_LIGHTS];
 } u;
 
 layout(push_constant) uniform Push {
@@ -56,8 +66,21 @@ vec3 fresnelSchlickRough(float cosT, vec3 F0, float rough) {
     return F0 + (Fr - F0) * pow(clamp(1.0 - cosT, 0.0, 1.0), 5.0);
 }
 
-// Cheap analytic environment sky in a direction: blends ground/horizon/zenith
-// by elevation. Stands in for a prefiltered environment map (IBL source).
+// Cook-Torrance contribution for one light direction L (returns value to scale
+// by the light's incoming radiance).
+vec3 brdf(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float rough,
+          vec3 F0) {
+    vec3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 1e-4);
+    float D = distributionGGX(N, H, rough);
+    float G = geometrySmith(N, V, L, rough);
+    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+    vec3 spec = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
+    vec3 kd = (vec3(1.0) - F) * (1.0 - metallic);
+    return (kd * albedo / PI + spec) * NdotL;
+}
+
 vec3 skyEnv(vec3 dir) {
     float y = dir.y;
     vec3 upper = mix(u.skyHorizon.rgb, u.skyZenith.rgb, clamp(y, 0.0, 1.0));
@@ -65,7 +88,6 @@ vec3 skyEnv(vec3 dir) {
     return y >= 0.0 ? upper : lower;
 }
 
-// Hemispherical diffuse irradiance about N (integrated environment, approx).
 vec3 irradiance(vec3 N) {
     vec3 sky = mix(u.skyHorizon.rgb, u.skyZenith.rgb,
                    clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
@@ -75,46 +97,61 @@ vec3 irradiance(vec3 N) {
 void main() {
     vec3 N = normalize(vNormal);
     vec3 V = normalize(u.camPos.xyz - vWorldPos);
-    vec3 L = normalize(u.sunDir.xyz);
-    vec3 H = normalize(V + L);
     float NdotV = max(dot(N, V), 1e-4);
-    float NdotL = max(dot(N, L), 0.0);
 
     vec3 albedo = pc.albedo.rgb;
     float metallic = clamp(pc.albedo.w, 0.0, 1.0);
     float rough = clamp(pc.material.x, 0.04, 1.0);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
-    // Direct: sun.
-    float D = distributionGGX(N, H, rough);
-    float G = geometrySmith(N, V, L, rough);
-    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-    vec3 spec = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
-    vec3 kd = (vec3(1.0) - F) * (1.0 - metallic);
-    vec3 sunRadiance = u.sunColor.rgb * u.sunColor.w;
-    vec3 direct = (kd * albedo / PI + spec) * sunRadiance * NdotL;
+    // Sun (Environment) direct.
+    vec3 sunL = normalize(u.sunDir.xyz);
+    vec3 direct = brdf(N, V, sunL, albedo, metallic, rough, F0) *
+                  u.sunColor.rgb * u.sunColor.w;
 
-    // IBL: diffuse irradiance + specular reflection from the sky environment.
+    // Punctual lights.
+    int count = int(u.params.y);
+    for (int i = 0; i < count && i < MAX_LIGHTS; ++i) {
+        Light lt = u.lights[i];
+        int type = int(lt.posType.w);
+        vec3 L;
+        float atten = 1.0;
+        if (type == 0) {
+            L = normalize(-lt.dirRange.xyz);  // directional
+        } else {
+            vec3 toL = lt.posType.xyz - vWorldPos;
+            float dist = length(toL);
+            L = toL / max(dist, 1e-4);
+            float range = max(lt.dirRange.w, 1e-3);
+            float rf = clamp(1.0 - pow(dist / range, 4.0), 0.0, 1.0);
+            atten = (rf * rf) / max(dist * dist, 1e-4);
+            if (type == 2) {  // spot cone
+                float cosA = dot(-L, normalize(lt.dirRange.xyz));
+                atten *= smoothstep(lt.spot.y, lt.spot.x, cosA);
+            }
+        }
+        if (atten <= 0.0) continue;
+        vec3 radiance = lt.color.rgb * lt.color.w * atten;
+        direct += brdf(N, V, L, albedo, metallic, rough, F0) * radiance;
+    }
+
+    // IBL ambient.
     vec3 Fr = fresnelSchlickRough(NdotV, F0, rough);
     vec3 kdIBL = (vec3(1.0) - Fr) * (1.0 - metallic);
     vec3 diffuseIBL = irradiance(N) * albedo * kdIBL;
 
     vec3 R = reflect(-V, N);
-    // Blur the reflection toward the diffuse irradiance as roughness rises.
     vec3 prefiltered = mix(skyEnv(R), irradiance(N), rough);
-    // Analytic environment BRDF (Karis mobile approximation).
     const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
     const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
-    vec4 r = rough * c0 + c1;
-    float a004 = min(r.x * r.x, exp2(-9.28 * NdotV)) * r.x + r.y;
-    vec2 envBRDF = vec2(-1.04, 1.04) * a004 + r.zw;
+    vec4 rp = rough * c0 + c1;
+    float a004 = min(rp.x * rp.x, exp2(-9.28 * NdotV)) * rp.x + rp.y;
+    vec2 envBRDF = vec2(-1.04, 1.04) * a004 + rp.zw;
     vec3 specularIBL = prefiltered * (F0 * envBRDF.x + envBRDF.y);
 
     vec3 ambient = (diffuseIBL + specularIBL) * u.params.x;
-
     vec3 color = direct + ambient;
 
-    // Tonemap (Reinhard) + gamma, matching the sky pass.
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
     outColor = vec4(color, 1.0);

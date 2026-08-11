@@ -23,7 +23,15 @@ struct LinePush {
     f32 tint[4];
 };
 
+constexpr u32 kMaxLights = 16;
+
 // Per-frame camera + lighting UBO (matches SceneUBO in scene.vert/frag).
+struct GpuLight {
+    f32 posType[4];   // xyz position, w type
+    f32 dirRange[4];  // xyz direction, w range
+    f32 color[4];     // rgb color, w intensity
+    f32 spot[4];      // x cosInner, y cosOuter
+};
 struct SceneUBO {
     Math::Mat4 viewProj;
     f32 camPos[4];
@@ -32,7 +40,8 @@ struct SceneUBO {
     f32 skyZenith[4];
     f32 skyHorizon[4];
     f32 groundColor[4];
-    f32 params[4];  // x = iblIntensity
+    f32 params[4];  // x = iblIntensity, y = lightCount
+    GpuLight lights[kMaxLights];
 };
 
 void SetVec3(f32* dst, const Math::Vec3& v, f32 w = 1.0f) {
@@ -538,6 +547,27 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
     SetVec3(ubo.skyHorizon, scene.lighting.skyHorizon);
     SetVec3(ubo.groundColor, scene.lighting.groundColor);
     ubo.params[0] = scene.lighting.iblIntensity;
+    u32 lightCount = scene.lightCount < kMaxLights ? scene.lightCount : kMaxLights;
+    ubo.params[1] = static_cast<f32>(lightCount);
+    for (u32 i = 0; i < lightCount; ++i) {
+        const SceneLight& l = scene.lights[i];
+        GpuLight& g = ubo.lights[i];
+        g.posType[0] = l.position.x;
+        g.posType[1] = l.position.y;
+        g.posType[2] = l.position.z;
+        g.posType[3] = static_cast<f32>(l.type);
+        Vec3 dir = Normalize(l.direction);
+        g.dirRange[0] = dir.x;
+        g.dirRange[1] = dir.y;
+        g.dirRange[2] = dir.z;
+        g.dirRange[3] = l.range;
+        g.color[0] = l.color.x;
+        g.color[1] = l.color.y;
+        g.color[2] = l.color.z;
+        g.color[3] = l.intensity;
+        g.spot[0] = l.cosInner;
+        g.spot[1] = l.cosOuter;
+    }
     std::memcpy(m_ubo.mapped, &ubo, sizeof(ubo));
 
     // Upload dynamic overlay-line data.

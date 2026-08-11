@@ -62,6 +62,7 @@ private:
 
     TranslateGizmo m_gizmo;
     std::vector<SceneInstance> m_instances;  // rebuilt each frame
+    std::vector<SceneLight> m_lights;        // rebuilt each frame
 
     // Orbit camera.
     f32 m_camYaw = 0.9f;

@@ -81,6 +81,27 @@ SceneView EditorScreen::BuildSceneView() {
         m_instances.push_back(inst);
     }
 
+    // Punctual lights (position from Transform, aim from its rotation).
+    m_lights.clear();
+    auto lightView =
+        m_scene.Registry().view<TransformComponent, LightComponent>();
+    for (Entity e : lightView) {
+        const auto& tf = lightView.get<TransformComponent>(e);
+        const auto& lc = lightView.get<LightComponent>(e);
+        Mat4 mtx = tf.Matrix();
+        Vec3 fwd = Normalize(Vec3(-mtx.m[8], -mtx.m[9], -mtx.m[10]));
+        SceneLight sl;
+        sl.type = static_cast<u32>(lc.type);
+        sl.position = tf.position;
+        sl.direction = fwd;
+        sl.range = lc.range;
+        sl.color = lc.color;
+        sl.intensity = lc.intensity;
+        sl.cosInner = std::cos(Radians(lc.innerAngleDeg));
+        sl.cosOuter = std::cos(Radians(lc.outerAngleDeg));
+        m_lights.push_back(sl);
+    }
+
     SceneView scene;
 
     // Sky/atmosphere from the Environment component (first entity that has one).
@@ -118,6 +139,8 @@ SceneView EditorScreen::BuildSceneView() {
     scene.farZ = m_farZ;
     scene.instances = m_instances.data();
     scene.instanceCount = static_cast<u32>(m_instances.size());
+    scene.lights = m_lights.data();
+    scene.lightCount = static_cast<u32>(m_lights.size());
 
     // Gizmo overlay for the selected entity.
     if (m_scene.IsValid(m_selected) &&
@@ -379,12 +402,40 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
                  env.sunSizeDegrees);
         y += 8.0f;
     }
+    if (reg.all_of<LightComponent>(m_selected)) {
+        sectionHeader("Light");
+        auto& lc = reg.get<LightComponent>(m_selected);
+        ui.LabelIn({x, y, 82, 22}, "Type", t.textDim);
+        const char* types[3] = {"Directional", "Point", "Spot"};
+        f32 bw = (w - 82.0f) / 3.0f;
+        for (int p = 0; p < 3; ++p) {
+            Rect r{x + 82.0f + bw * static_cast<f32>(p), y, bw - 2.0f, 22};
+            bool sel = static_cast<int>(lc.type) == p;
+            if (ui.Tab(Slate::Context::ID(types[p]), r, types[p], sel)) {
+                lc.type = static_cast<LightType>(p);
+            }
+        }
+        y += 28.0f;
+        vec3Row("Color", Slate::Context::ID("insp.lcol"), &lc.color.x);
+        floatRow("Intensity", Slate::Context::ID("insp.lint"), lc.intensity);
+        if (lc.type != LightType::Directional) {
+            floatRow("Range", Slate::Context::ID("insp.lrng"), lc.range);
+        }
+        if (lc.type == LightType::Spot) {
+            floatRow("Inner Angle", Slate::Context::ID("insp.lin"),
+                     lc.innerAngleDeg);
+            floatRow("Outer Angle", Slate::Context::ID("insp.lout"),
+                     lc.outerAngleDeg);
+        }
+        y += 8.0f;
+    }
 
     // Add Component popup: lists component types not yet on the entity.
     if (m_showAddMenu) {
         bool canMesh = !reg.all_of<MeshRendererComponent>(m_selected);
         bool canEnv = !reg.all_of<EnvironmentComponent>(m_selected);
-        int count = (canMesh ? 1 : 0) + (canEnv ? 1 : 0);
+        bool canLight = !reg.all_of<LightComponent>(m_selected);
+        int count = (canMesh ? 1 : 0) + (canEnv ? 1 : 0) + (canLight ? 1 : 0);
         f32 mw = 190.0f;
         f32 mx = body.Right() - mw - 12.0f;
         f32 my = body.y + 44.0f;
@@ -398,6 +449,13 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
             m_showAddMenu = false;
         }
         if (canMesh) my += 28.0f;
+        if (canLight &&
+            ui.Button(Slate::Context::ID("add.light"), {mx, my, mw, 24},
+                      "Light")) {
+            reg.emplace<LightComponent>(m_selected);
+            m_showAddMenu = false;
+        }
+        if (canLight) my += 28.0f;
         if (canEnv &&
             ui.Button(Slate::Context::ID("add.env"), {mx, my, mw, 24},
                       "Environment")) {

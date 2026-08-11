@@ -36,6 +36,20 @@ struct MeshRendererComponent {
     f32 roughness = 0.5f;
 };
 
+// A punctual light source. Position comes from the entity's Transform; the aim
+// (spot/directional) comes from its rotation. The Environment already provides
+// the sun, so these are additional lights.
+enum class LightType { Directional, Point, Spot };
+
+struct LightComponent {
+    LightType type = LightType::Point;
+    Math::Vec3 color{1.0f, 0.95f, 0.85f};
+    f32 intensity = 8.0f;
+    f32 range = 14.0f;         // point/spot falloff distance
+    f32 innerAngleDeg = 22.0f;  // spot: full-bright cone half-angle
+    f32 outerAngleDeg = 30.0f;  // spot: cutoff half-angle
+};
+
 // Drives the world's sky/atmosphere. Attached by default to an Environment game
 // object. The renderer evaluates an analytic Preetham daylight sky from these
 // values (see Luma::SkyParams / the Vulkan sky pass).

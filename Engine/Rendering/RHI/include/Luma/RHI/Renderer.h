@@ -72,6 +72,19 @@ struct SceneInstance {
     f32 roughness = 0.5f;
 };
 
+// A punctual light fed to the scene shader. `type`: 0 = directional, 1 = point,
+// 2 = spot. Directional ignores position/range; point ignores cone angles.
+struct SceneLight {
+    Math::Vec3 position{0.0f, 3.0f, 0.0f};
+    u32 type = 1;
+    Math::Vec3 direction{0.0f, -1.0f, 0.0f};  // spot/directional aim
+    f32 range = 12.0f;
+    Math::Vec3 color{1.0f, 1.0f, 1.0f};
+    f32 intensity = 6.0f;
+    f32 cosInner = 0.94f;  // spot cone (cos of inner half-angle)
+    f32 cosOuter = 0.87f;  // spot cone (cos of outer half-angle)
+};
+
 // Analytic lighting + image-based-lighting environment, fed per frame. The sun
 // comes from the Environment; the sky colors approximate the environment
 // irradiance/reflection used for IBL (diffuse + specular ambient).
@@ -138,6 +151,11 @@ struct SceneView {
 
     const SceneInstance* instances = nullptr;
     u32 instanceCount = 0;
+
+    // Punctual lights (point/spot/directional), in addition to the Environment
+    // sun that also drives the sky + IBL.
+    const SceneLight* lights = nullptr;
+    u32 lightCount = 0;
 
     // Depth-tested world lines (e.g. the ground grid).
     const LineVertex* lines = nullptr;
