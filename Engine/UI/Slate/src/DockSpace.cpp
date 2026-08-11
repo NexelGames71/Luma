@@ -159,6 +159,8 @@ void DockSpace::RemovePanel(const std::string& id) {
 void DockSpace::ApplyPending() {
     if (!m_pending.active) return;
     m_pending.active = false;
+    DockDir dir = m_pending.dir;
+    bool edge = m_pending.edge;
 
     // Re-find the target leaf by one of its panels (pointer may be stale after
     // tree edits) - capture a stable target panel id now.
@@ -166,8 +168,9 @@ void DockSpace::ApplyPending() {
     std::string targetPanel;
     if (target && !target->tabs.empty()) targetPanel = target->tabs[0];
 
-    // No-op: dropping a single-tab leaf onto itself.
-    if (target && target->tabs.size() == 1 && target->tabs[0] == m_dragPanel) {
+    // No-op: dropping a single-tab leaf onto itself (leaf docks only).
+    if (!edge && target && target->tabs.size() == 1 &&
+        target->tabs[0] == m_dragPanel) {
         return;
     }
 
@@ -176,16 +179,23 @@ void DockSpace::ApplyPending() {
         DockRoot(m_dragPanel);
         return;
     }
+
+    // Workspace-edge dock: split the whole root against the chosen edge.
+    if (edge) {
+        SplitSlot(m_root, dir, m_dragPanel, 0.28f);
+        return;
+    }
+
     Node* tgt = targetPanel.empty()
                     ? nullptr
                     : FindLeafWithPanel(m_root.get(), targetPanel);
     if (!tgt) return;
-    if (m_pending.dir == DockDir::Center) {
+    if (dir == DockDir::Center) {
         tgt->tabs.push_back(m_dragPanel);
         tgt->active = static_cast<int>(tgt->tabs.size()) - 1;
     } else {
         std::unique_ptr<Node>* slot = FindSlot(m_root, tgt);
-        if (slot) SplitSlot(*slot, m_pending.dir, m_dragPanel, 0.5f);
+        if (slot) SplitSlot(*slot, dir, m_dragPanel, 0.5f);
     }
 }
 
@@ -193,7 +203,9 @@ void DockSpace::DrawLeaf(Context& ctx, Node* n) {
     Theme& t = ctx.theme();
     Rect rect = n->rect;
     ctx.Panel(rect, t.panelBg);
-    ctx.Panel({rect.x, rect.y, rect.w, kTabBarH}, t.header);
+    // Tab bar with a subtle vertical gradient for depth.
+    ctx.GradientRect({rect.x, rect.y, rect.w, kTabBarH},
+                     Color::RGB(44, 48, 57), Color::RGB(32, 35, 42));
 
     // Tabs.
     f32 tx = rect.x;
@@ -201,7 +213,7 @@ void DockSpace::DrawLeaf(Context& ctx, Node* n) {
         const std::string& id = n->tabs[static_cast<usize>(i)];
         auto it = m_panels.find(id);
         std::string title = it != m_panels.end() ? it->second.title : id;
-        f32 tabW = ctx.font().Measure(title).x + 28.0f;
+        f32 tabW = ctx.uiFont().Measure(title).x + 30.0f;
         Rect tab{tx, rect.y, tabW, kTabBarH};
         bool active = (i == n->active);
         bool hovered = tab.Contains(ctx.mouse());
@@ -211,7 +223,7 @@ void DockSpace::DrawLeaf(Context& ctx, Node* n) {
         } else if (hovered) {
             ctx.Panel(tab, t.buttonHover);
         }
-        ctx.LabelIn({tab.x + 12.0f, tab.y, tabW - 16.0f, kTabBarH}, title,
+        ctx.Heading({tab.x + 13.0f, tab.y, tabW - 18.0f, kTabBarH}, title,
                     active ? t.text : t.textDim);
         if (hovered) {
             if (ctx.mousePressed(0)) {
@@ -292,64 +304,102 @@ void DockSpace::Draw(Context& ctx, const Rect& area) {
         if (m_dragging) {
             ctx.RequestCursor(CursorShape::Hand);
             Theme& t = ctx.theme();
-            Node* target = LeafUnderPoint(m_root.get(), m);
             m_pending.active = false;
+            const f32 bs = 42.0f, gap = 8.0f, off = bs + gap;
+
+            auto edgeZone = [](const Rect& a, DockDir d, f32 r) -> Rect {
+                switch (d) {
+                    case DockDir::Left:  return {a.x, a.y, a.w * r, a.h};
+                    case DockDir::Right: return {a.x + a.w * (1 - r), a.y,
+                                                 a.w * r, a.h};
+                    case DockDir::Up:    return {a.x, a.y, a.w, a.h * r};
+                    case DockDir::Down:  return {a.x, a.y + a.h * (1 - r), a.w,
+                                                 a.h * r};
+                    default:             return a;
+                }
+            };
+
+            // (1) Workspace-edge pods, pinned to the four edges of the dock area.
+            struct Slot { DockDir dir; Rect btn; };
+            f32 acx = area.x + area.w * 0.5f, acy = area.y + area.h * 0.5f;
+            const f32 pad = 22.0f;
+            Slot edges[4] = {
+                {DockDir::Left, {area.x + pad, acy - bs / 2, bs, bs}},
+                {DockDir::Right, {area.Right() - pad - bs, acy - bs / 2, bs, bs}},
+                {DockDir::Up, {acx - bs / 2, area.y + pad, bs, bs}},
+                {DockDir::Down, {acx - bs / 2, area.Bottom() - pad - bs, bs, bs}},
+            };
+            DockDir edgeDir = DockDir::Center;
+            bool edgeHover = false;
+            for (const Slot& e : edges) {
+                if (e.btn.Contains(m)) { edgeDir = e.dir; edgeHover = true; }
+            }
+
+            // (2) Center compass over the panel under the cursor.
+            Node* target = LeafUnderPoint(m_root.get(), m);
+            DockDir hoverDir = DockDir::Center;
+            bool leafHover = false;
+            Slot slots[5];
             if (target) {
-                // Luma dock compass: a center pod (tabify) surrounded by four
-                // directional pods, laid out over the hovered panel's center.
-                const f32 bs = 42.0f, gap = 8.0f, off = bs + gap;
                 f32 cx = target->rect.x + target->rect.w * 0.5f;
                 f32 cy = target->rect.y + target->rect.h * 0.5f;
-                struct Slot { DockDir dir; Rect btn; };
-                Slot slots[5] = {
-                    {DockDir::Center, {cx - bs / 2, cy - bs / 2, bs, bs}},
-                    {DockDir::Left, {cx - bs / 2 - off, cy - bs / 2, bs, bs}},
-                    {DockDir::Right, {cx - bs / 2 + off, cy - bs / 2, bs, bs}},
-                    {DockDir::Up, {cx - bs / 2, cy - bs / 2 - off, bs, bs}},
-                    {DockDir::Down, {cx - bs / 2, cy - bs / 2 + off, bs, bs}},
-                };
-
-                // Which pod is the cursor over?
-                DockDir hoverDir = DockDir::Center;
-                bool anyHover = false;
-                for (const Slot& s : slots) {
-                    if (s.btn.Contains(m)) {
-                        hoverDir = s.dir;
-                        anyHover = true;
+                slots[0] = {DockDir::Center, {cx - bs / 2, cy - bs / 2, bs, bs}};
+                slots[1] = {DockDir::Left, {cx - bs / 2 - off, cy - bs / 2, bs, bs}};
+                slots[2] = {DockDir::Right, {cx - bs / 2 + off, cy - bs / 2, bs, bs}};
+                slots[3] = {DockDir::Up, {cx - bs / 2, cy - bs / 2 - off, bs, bs}};
+                slots[4] = {DockDir::Down, {cx - bs / 2, cy - bs / 2 + off, bs, bs}};
+                if (!edgeHover) {
+                    for (const Slot& s : slots) {
+                        if (s.btn.Contains(m)) { hoverDir = s.dir; leafHover = true; }
                     }
                 }
+            }
 
-                // Preview the resulting region under the compass.
-                if (anyHover) {
-                    Rect zr = ZoneRect(target->rect, hoverDir);
-                    ctx.Panel(zr, Color::RGBA(60, 140, 220, 70));
-                    ctx.PanelBordered(zr, Color::RGBA(0, 0, 0, 0), t.accent, 2.0f);
-                    m_pending = PendingDock{true, m_dragPanel, target, hoverDir};
-                }
+            // Preview highlight + pending dock. Edge pods win when hovered.
+            if (edgeHover) {
+                Rect zr = edgeZone(area, edgeDir, 0.28f);
+                ctx.Panel(zr, Color::RGBA(56, 150, 255, 78));
+                ctx.PanelBordered(zr, Color::RGBA(0, 0, 0, 0), t.accent, 2.0f);
+                m_pending = PendingDock{true, m_dragPanel, nullptr, edgeDir, true};
+            } else if (leafHover) {
+                Rect zr = ZoneRect(target->rect, hoverDir);
+                ctx.Panel(zr, Color::RGBA(56, 150, 255, 66));
+                ctx.PanelBordered(zr, Color::RGBA(0, 0, 0, 0), t.accent, 2.0f);
+                m_pending =
+                    PendingDock{true, m_dragPanel, target, hoverDir, false};
+            }
 
-                // A rounded backing plate + soft glow ring behind the pods.
+            // Draw edge pods (subtle backdrop each) then the center compass.
+            for (const Slot& e : edges) {
+                DrawDockPod(ctx, e.btn, e.dir, t,
+                            edgeHover && e.dir == edgeDir);
+            }
+            if (target) {
                 f32 span = off + bs / 2;
+                f32 cx = target->rect.x + target->rect.w * 0.5f;
+                f32 cy = target->rect.y + target->rect.h * 0.5f;
                 Rect glow{cx - span - 10.0f, cy - span - 10.0f,
                           2 * span + 20.0f, 2 * span + 20.0f};
-                ctx.PanelRounded(glow, Color::RGBA(20, 120, 220, 40), 18.0f);
+                ctx.PanelRounded(glow, Color::RGBA(30, 120, 240, 46), 18.0f);
                 Rect plate{cx - span - 4.0f, cy - span - 4.0f, 2 * span + 8.0f,
                            2 * span + 8.0f};
-                ctx.PanelRoundedBordered(plate, Color::RGBA(22, 25, 32, 235),
-                                         Color::RGBA(70, 78, 92, 255), 14.0f, 1.0f);
-
+                ctx.PanelRoundedBordered(plate, Color::RGBA(24, 27, 34, 240),
+                                         Color::RGBA(74, 82, 96, 255), 14.0f, 1.0f);
                 for (const Slot& s : slots) {
                     DrawDockPod(ctx, s.btn, s.dir, t,
-                                anyHover && s.dir == hoverDir);
+                                leafHover && s.dir == hoverDir);
                 }
             }
+
             // A floating "ghost" label following the cursor.
             auto it = m_panels.find(m_dragPanel);
             std::string title = it != m_panels.end() ? it->second.title
                                                      : m_dragPanel;
-            f32 gw = ctx.font().Measure(title).x + 24.0f;
-            Rect ghost{m.x + 12.0f, m.y + 8.0f, gw, 24.0f};
-            ctx.Panel(ghost, ctx.theme().button);
-            ctx.LabelIn(ghost, title, ctx.theme().text, Align::Center);
+            f32 gw = ctx.uiFont().Measure(title).x + 26.0f;
+            Rect ghost{m.x + 12.0f, m.y + 8.0f, gw, 26.0f};
+            ctx.PanelRoundedBordered(ghost, ctx.theme().accent,
+                                     ctx.theme().accent, 5.0f, 1.0f);
+            ctx.Heading(ghost, title, ctx.theme().accentText, Align::Center);
         }
     } else {
         // Mouse released.

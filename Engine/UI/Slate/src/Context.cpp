@@ -20,19 +20,21 @@ constexpr int kKeyEnd = 269;
 
 Theme DarkTheme() {
     Theme t;
-    t.windowBg = Color::RGB(24, 26, 31);
-    t.panelBg = Color::RGB(32, 35, 42);
-    t.panelBorder = Color::RGB(48, 52, 61);
-    t.header = Color::RGB(20, 22, 27);
-    t.button = Color::RGB(48, 52, 61);
-    t.buttonHover = Color::RGB(60, 66, 78);
-    t.buttonActive = Color::RGB(40, 44, 52);
-    t.buttonText = Color::RGB(225, 228, 235);
-    t.text = Color::RGB(228, 231, 238);
-    t.textDim = Color::RGB(140, 148, 162);
-    t.accent = Color::RGB(50, 140, 220);
-    t.accentText = Color::RGB(245, 249, 255);
-    t.fieldBg = Color::RGB(18, 20, 24);
+    // A layered dark palette: deep window, raised panels, subtle borders and a
+    // vivid Luma accent for selection/focus.
+    t.windowBg = Color::RGB(17, 18, 22);
+    t.panelBg = Color::RGB(31, 34, 41);
+    t.panelBorder = Color::RGB(12, 13, 16);
+    t.header = Color::RGB(38, 42, 50);
+    t.button = Color::RGB(52, 57, 67);
+    t.buttonHover = Color::RGB(66, 72, 85);
+    t.buttonActive = Color::RGB(42, 46, 55);
+    t.buttonText = Color::RGB(228, 231, 238);
+    t.text = Color::RGB(233, 236, 243);
+    t.textDim = Color::RGB(146, 154, 168);
+    t.accent = Color::RGB(56, 150, 255);
+    t.accentText = Color::RGB(247, 250, 255);
+    t.fieldBg = Color::RGB(20, 22, 27);
     t.fieldBorder = Color::RGB(58, 63, 74);
     t.cardBg = Color::RGB(38, 42, 50);
     t.cardHover = Color::RGB(46, 51, 61);
@@ -44,11 +46,13 @@ Theme DarkTheme() {
 
 bool Context::Init(Renderer& renderer, const std::string& fontPath,
                    const std::string& titleFontPath, f32 baseSize,
-                   f32 titleSize) {
+                   f32 titleSize, const std::string& uiFontPath, f32 uiSize) {
     const std::string& titlePath =
         titleFontPath.empty() ? fontPath : titleFontPath;
+    const std::string& uiPath = uiFontPath.empty() ? titlePath : uiFontPath;
     bool ok = m_font.LoadFromFile(renderer, fontPath, baseSize);
     ok = m_titleFont.LoadFromFile(renderer, titlePath, titleSize) && ok;
+    ok = m_uiFont.LoadFromFile(renderer, uiPath, uiSize) && ok;
     return ok;
 }
 
@@ -192,6 +196,18 @@ void Context::LabelIn(const Rect& rect, std::string_view text, Color color,
     m_draw.PopClip();
 }
 
+void Context::Heading(const Rect& rect, std::string_view text, Color color,
+                      Align align) {
+    Vec2 size = m_uiFont.Measure(text);
+    f32 x = rect.x + 8.0f;
+    if (align == Align::Center) x = rect.x + (rect.w - size.x) * 0.5f;
+    else if (align == Align::Right) x = rect.Right() - size.x - 8.0f;
+    f32 y = rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f;
+    m_draw.PushClip(rect);
+    m_draw.AddText(m_uiFont, {x, y}, text, color);
+    m_draw.PopClip();
+}
+
 bool Context::Button(u64 id, const Rect& rect, std::string_view label) {
     bool hovered = rect.Contains(m_mouse);
     if (hovered) {
@@ -210,10 +226,10 @@ bool Context::Button(u64 id, const Rect& rect, std::string_view label) {
     else if (hovered) bg = m_theme.buttonHover;
     m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
 
-    Vec2 size = m_font.Measure(label);
+    Vec2 size = m_uiFont.Measure(label);
     Vec2 pos{rect.x + (rect.w - size.x) * 0.5f,
-             rect.y + (rect.h - m_font.LineHeight()) * 0.5f};
-    m_draw.AddText(m_font, pos, label, m_theme.buttonText);
+             rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f};
+    m_draw.AddText(m_uiFont, pos, label, m_theme.buttonText);
     return clicked;
 }
 

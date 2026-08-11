@@ -62,6 +62,7 @@ private:
         std::string panel;
         Node* target = nullptr;
         DockDir dir = DockDir::Center;
+        bool edge = false;  // dock against the whole workspace edge (split root)
     };
 
     Node* FindLeafWithPanel(Node* n, const std::string& id) const;

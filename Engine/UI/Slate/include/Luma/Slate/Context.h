@@ -47,8 +47,9 @@ public:
     // Loads the base + title fonts through the renderer. If titleFontPath is
     // empty the base font is reused for titles. Returns false on error.
     bool Init(Renderer& renderer, const std::string& fontPath,
-              const std::string& titleFontPath = {}, f32 baseSize = 18.0f,
-              f32 titleSize = 30.0f);
+              const std::string& titleFontPath = {}, f32 baseSize = 16.0f,
+              f32 titleSize = 30.0f, const std::string& uiFontPath = {},
+              f32 uiSize = 15.0f);
 
     // --- Input feed (call from the app's event callback) --------------------
     void OnMouseMove(f32 x, f32 y);
@@ -81,6 +82,9 @@ public:
     void Label(Vec2 pos, std::string_view text, Color color);
     void LabelIn(const Rect& rect, std::string_view text, Color color,
                  Align align = Align::Left, bool title = false);
+    // Draws text in the semibold UI font (for tab titles, section headers).
+    void Heading(const Rect& rect, std::string_view text, Color color,
+                 Align align = Align::Left);
     bool Button(u64 id, const Rect& rect, std::string_view label);
     bool Tab(u64 id, const Rect& rect, std::string_view label, bool active);
     bool TextField(u64 id, const Rect& rect, std::string& text,
@@ -120,6 +124,7 @@ public:
     Theme& theme() { return m_theme; }
     Font& font() { return m_font; }
     Font& titleFont() { return m_titleFont; }
+    Font& uiFont() { return m_uiFont; }
     Vec2 mouse() const { return m_mouse; }
     Vec2 mouseDelta() const { return m_mouseDelta; }
     f32 scrollDelta() const { return m_scroll; }
@@ -145,6 +150,7 @@ private:
     DrawList m_draw;
     Font m_font;
     Font m_titleFont;
+    Font m_uiFont;
     Theme m_theme = DarkTheme();
 
     Vec2 m_mouse;

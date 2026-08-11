@@ -165,21 +165,22 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
 
     // Menu bar.
     Rect menu{0, 0, width, 32};
-    ui.Panel(menu, t.header);
+    ui.GradientRect(menu, Color::RGB(44, 48, 57), Color::RGB(32, 35, 42));
     const char* items[] = {"Luma", "File", "Edit", "Assets", "Window", "Help"};
-    f32 mx = 12.0f;
+    f32 mx = 10.0f;
     for (const char* item : items) {
-        f32 w = ui.font().Measure(item).x + 24.0f;
-        ui.Button(Slate::Context::ID(item), {mx, 2, w, 28}, item);
+        f32 w = ui.uiFont().Measure(item).x + 22.0f;
+        ui.Button(Slate::Context::ID(item), {mx, 3, w, 26}, item);
         mx += w;
     }
-    ui.LabelIn({width - 320, 0, 308, 32},
+    ui.Heading({width - 320, 0, 308, 32},
                m_project ? m_project->Name() : "(no project)", t.textDim,
                Align::Right);
 
     // Toolbar.
     Rect toolbar{0, 32, width, 36};
-    ui.Panel(toolbar, Color::RGB(28, 31, 37));
+    ui.GradientRect(toolbar, Color::RGB(30, 33, 40), Color::RGB(22, 24, 29));
+    ui.Panel({0, 67, width, 1}, t.panelBorder);
     ui.IconButton(Slate::Context::ID("play"), {width / 2 - 46, 35, 30, 28},
                   m_iconPlay);
     ui.IconButton(Slate::Context::ID("pause"), {width / 2 - 14, 35, 30, 28},
@@ -245,13 +246,15 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
     f32 x = body.x + 12.0f;
     f32 y = body.y + 12.0f;
     f32 w = body.w - 24.0f;
-    ui.LabelIn({x, y, w, 22}, reg.get<NameComponent>(m_selected).name, t.text);
+    ui.Heading({x, y, w, 22}, reg.get<NameComponent>(m_selected).name, t.text);
     y += 30.0f;
 
-    // Transform section header.
-    ui.Panel({body.x, y, body.w, 24}, t.header);
-    ui.LabelIn({x, y, w, 24}, "Transform", t.text);
-    y += 30.0f;
+    // Transform section header with an accent tab on the left.
+    ui.GradientRect({body.x, y, body.w, 26}, Color::RGB(44, 48, 57),
+                    Color::RGB(34, 37, 44));
+    ui.Panel({body.x, y, 3, 26}, t.accent);
+    ui.Heading({x, y, w, 26}, "Transform", t.text);
+    y += 32.0f;
 
     auto& tf = reg.get<TransformComponent>(m_selected);
     auto field = [&](const char* label, u64 id, f32* v) {

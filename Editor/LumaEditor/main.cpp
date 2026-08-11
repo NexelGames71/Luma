@@ -104,13 +104,16 @@ int main(int argc, char** argv) {
     rc.vsync = true;
     std::unique_ptr<Renderer> renderer = CreateVulkanRenderer(*window, rc);
 
-    // Fonts: Open Sans (bundled), falling back to Segoe UI if not found.
+    // Fonts: Open Sans (bundled) - Regular for body, SemiBold for UI headings /
+    // tabs / buttons, Bold for large titles. Falls back to Segoe UI.
     std::string bodyFont = FindEditorAsset("Fonts/OpenSans-Regular.ttf");
-    std::string titleFont = FindEditorAsset("Fonts/OpenSans-SemiBold.ttf");
+    std::string uiFont = FindEditorAsset("Fonts/OpenSans-SemiBold.ttf");
+    std::string titleFont = FindEditorAsset("Fonts/OpenSans-Bold.ttf");
     if (bodyFont.empty()) bodyFont = "C:/Windows/Fonts/segoeui.ttf";
-    if (titleFont.empty()) titleFont = bodyFont;
+    if (uiFont.empty()) uiFont = bodyFont;
+    if (titleFont.empty()) titleFont = uiFont;
     Slate::Context ui;
-    if (!ui.Init(*renderer, bodyFont, titleFont)) {
+    if (!ui.Init(*renderer, bodyFont, titleFont, 16.0f, 30.0f, uiFont, 15.0f)) {
         LUMA_LOG_ERROR("Editor", "failed to load UI font");
     }
 
