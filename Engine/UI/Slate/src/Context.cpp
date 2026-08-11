@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace Luma::Slate {
 namespace {
@@ -429,6 +430,72 @@ bool Context::Checkbox(u64 id, const Rect& box, std::string_view label,
     return changed;
 }
 
+bool Context::DragFloat(u64 id, const Rect& rect, f32& value, f32 speed) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::ResizeEW;
+    }
+    if (hovered && m_mousePressed[0]) m_active = id;
+
+    bool changed = false;
+    if (m_active == id) {
+        m_requestedCursor = CursorShape::ResizeEW;
+        if (!m_mouseDown[0]) {
+            m_active = 0;
+        } else if (m_mouseDelta.x != 0.0f) {
+            value += m_mouseDelta.x * speed;
+            changed = true;
+        }
+    }
+
+    Color bg = (m_active == id) ? m_theme.buttonActive : m_theme.fieldBg;
+    m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
+    if (hovered || m_active == id) {
+        m_draw.AddRectFilledRounded(rect, m_theme.accent, m_theme.rounding);
+        m_draw.AddRectFilledRounded(rect.Inset(1.0f, 1.0f), bg,
+                                    m_theme.rounding - 1.0f);
+    }
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.2f", value);
+    Vec2 ts = m_font.Measure(buf);
+    m_draw.PushClip(rect);
+    m_draw.AddText(m_font,
+                   {rect.x + (rect.w - ts.x) * 0.5f,
+                    rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
+                   buf, m_theme.text);
+    m_draw.PopClip();
+    return changed;
+}
+
+bool Context::Vector3Field(u64 id, const Rect& rect, f32* xyz) {
+    const char* labels[3] = {"X", "Y", "Z"};
+    const Color labelColors[3] = {Color::RGB(196, 78, 82),
+                                  Color::RGB(96, 176, 96),
+                                  Color::RGB(78, 130, 208)};
+    const f32 gap = 6.0f;
+    const f32 cellW = (rect.w - gap * 2.0f) / 3.0f;
+    const f32 labelW = 18.0f;
+    bool changed = false;
+    for (int i = 0; i < 3; ++i) {
+        Rect cell{rect.x + static_cast<f32>(i) * (cellW + gap), rect.y, cellW,
+                  rect.h};
+        m_draw.AddRectFilledRounded({cell.x, cell.y, labelW, cell.h},
+                                    labelColors[i], m_theme.rounding);
+        Vec2 ls = m_font.Measure(labels[i]);
+        m_draw.AddText(m_font,
+                       {cell.x + (labelW - ls.x) * 0.5f,
+                        cell.y + (cell.h - m_font.LineHeight()) * 0.5f},
+                       labels[i], Color::RGB(245, 245, 248));
+        Rect field{cell.x + labelW + 2.0f, cell.y, cell.w - labelW - 2.0f,
+                   cell.h};
+        if (DragFloat(id * 4 + static_cast<u64>(i) + 1, field, xyz[i])) {
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 bool Context::CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
                                bool& open) {
     bool hovered = rect.Contains(m_mouse);
@@ -521,14 +588,22 @@ bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
 }
 
 Rect Context::PanelWithTitle(const Rect& rect, std::string_view title) {
-    // Flush docked panel (Unity-style): square, full-bleed, header strip + a
-    // 1px divider. Adjacent panels butt together with only the splitter seam.
+    // Flush docked panel with an active tab (Unity/Unreal style): a header strip
+    // with a tab chip that merges into the body and carries an accent underline.
     const f32 headerH = 28.0f;
     m_draw.AddRectFilled(rect, m_theme.panelBg);
     m_draw.AddRectFilled({rect.x, rect.y, rect.w, headerH}, m_theme.header);
+
+    f32 tabW = m_font.Measure(title).x + 30.0f;
+    Rect tab{rect.x, rect.y, tabW, headerH};
+    // Tab body matches the panel so it reads as the active/selected tab.
+    m_draw.AddRectFilled(tab, m_theme.panelBg);
+    m_draw.AddRectFilled({tab.x, tab.Bottom() - 2.0f, tab.w, 2.0f},
+                         m_theme.accent);
     m_draw.AddText(
-        m_font, {rect.x + 12.0f, rect.y + (headerH - m_font.LineHeight()) * 0.5f},
+        m_font, {rect.x + 14.0f, rect.y + (headerH - m_font.LineHeight()) * 0.5f},
         title, m_theme.text);
+
     m_draw.AddRectFilled({rect.x, rect.y + headerH, rect.w, 1.0f},
                          m_theme.panelBorder);
     return Rect{rect.x, rect.y + headerH + 1.0f, rect.w, rect.h - headerH - 1.0f};

@@ -230,22 +230,25 @@ void EditorScreen::DrawInspector(Slate::Context& ui, const Rect& rect) {
     }
     auto& reg = m_scene.Registry();
     f32 x = body.x + 12.0f;
-    f32 y = body.y + 10.0f;
-    ui.LabelIn({x, y, body.w - 24, 24}, reg.get<NameComponent>(m_selected).name,
-               t.text);
+    f32 y = body.y + 12.0f;
+    f32 w = body.w - 24.0f;
+    ui.LabelIn({x, y, w, 22}, reg.get<NameComponent>(m_selected).name, t.text);
     y += 30.0f;
 
-    const auto& tf = reg.get<TransformComponent>(m_selected);
-    auto row = [&](const char* label, const Math::Vec3& v) {
-        ui.LabelIn({x, y, 80, 22}, label, t.textDim);
-        char buf[96];
-        std::snprintf(buf, sizeof(buf), "%.2f   %.2f   %.2f", v.x, v.y, v.z);
-        ui.LabelIn({x + 80, y, body.w - 80 - 20, 22}, buf, t.text);
-        y += 26.0f;
+    // Transform section header.
+    ui.Panel({body.x, y, body.w, 24}, t.header);
+    ui.LabelIn({x, y, w, 24}, "Transform", t.text);
+    y += 30.0f;
+
+    auto& tf = reg.get<TransformComponent>(m_selected);
+    auto field = [&](const char* label, u64 id, f32* v) {
+        ui.LabelIn({x, y, 66, 24}, label, t.textDim);
+        ui.Vector3Field(id, {x + 66, y, w - 66, 22}, v);
+        y += 28.0f;
     };
-    row("Position", tf.position);
-    row("Rotation", tf.rotationEuler);
-    row("Scale", tf.scale);
+    field("Position", Slate::Context::ID("insp.pos"), &tf.position.x);
+    field("Rotation", Slate::Context::ID("insp.rot"), &tf.rotationEuler.x);
+    field("Scale", Slate::Context::ID("insp.scl"), &tf.scale.x);
 }
 
 }  // namespace Luma

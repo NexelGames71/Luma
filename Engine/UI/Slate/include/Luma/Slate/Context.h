@@ -91,6 +91,11 @@ public:
     // A button showing a centered icon.
     bool IconButton(u64 id, const Rect& rect, TextureHandle icon);
     bool Checkbox(u64 id, const Rect& box, std::string_view label, bool& value);
+    // A numeric field you scrub by dragging horizontally. Returns true if the
+    // value changed this frame.
+    bool DragFloat(u64 id, const Rect& rect, f32& value, f32 speed = 0.02f);
+    // Three drag fields with colored X/Y/Z labels (edits xyz[0..2] in place).
+    bool Vector3Field(u64 id, const Rect& rect, f32* xyz);
     // A collapsible section header; toggles `open` when clicked.
     bool CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
                           bool& open);
