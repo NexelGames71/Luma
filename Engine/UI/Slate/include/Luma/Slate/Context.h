@@ -72,6 +72,8 @@ public:
     void Triangle(Vec2 a, Vec2 b, Vec2 c, Color color);
     void Image(TextureHandle texture, const Rect& rect,
                Color tint = Color::RGB(255, 255, 255));
+    void PushClip(const Rect& rect);
+    void PopClip();
     void ImageUV(TextureHandle texture, const Rect& rect, const Rect& uv,
                  Color tint = Color::RGB(255, 255, 255));
     // Draws the Luma gem/prism logo mark centered at `center`.

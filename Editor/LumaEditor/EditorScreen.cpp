@@ -132,8 +132,35 @@ void EditorScreen::UpdateCameraAndGizmo(Slate::Context& ui, const Rect& vp) {
     }
 }
 
+void EditorScreen::BuildDock() {
+    m_dock.AddPanel("outliner", "World Outliner",
+                    [this](Slate::Context& c, const Rect& r) {
+                        DrawOutlinerContent(c, r);
+                    });
+    m_dock.AddPanel("viewport", "Viewport",
+                    [this](Slate::Context& c, const Rect& r) {
+                        DrawViewportContent(c, r);
+                    });
+    m_dock.AddPanel("inspector", "Inspector",
+                    [this](Slate::Context& c, const Rect& r) {
+                        DrawInspectorContent(c, r);
+                    });
+    m_dock.AddPanel("console", "Console",
+                    [this](Slate::Context& c, const Rect& r) {
+                        DrawConsoleContent(c, r);
+                    });
+    // Default layout: viewport center, console bottom (full width), outliner
+    // left, inspector right.
+    m_dock.DockRoot("viewport");
+    m_dock.DockWith("console", "viewport", Slate::DockDir::Down, 0.28f);
+    m_dock.DockWith("outliner", "viewport", Slate::DockDir::Left, 0.2f);
+    m_dock.DockWith("inspector", "viewport", Slate::DockDir::Right, 0.24f);
+    m_dockBuilt = true;
+}
+
 void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     Slate::Theme& t = ui.theme();
+    if (!m_dockBuilt) BuildDock();
     ui.Panel({0, 0, width, height}, t.windowBg);
 
     // Menu bar.
@@ -160,44 +187,31 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     ui.IconButton(Slate::Context::ID("stop"), {width / 2 + 18, 35, 30, 28},
                   m_iconStop);
 
-    // Dockable layout.
-    f32 top = 68.0f;
-    Rect workspace{0, top, width, height - top};
-    Rect main, console;
-    ui.SplitterH(Slate::Context::ID("dock.console"), workspace, m_consoleSplit,
-                 main, console);
-    Rect left, rest;
-    ui.SplitterV(Slate::Context::ID("dock.left"), main, m_leftSplit, left, rest);
-    Rect center, right;
-    ui.SplitterV(Slate::Context::ID("dock.right"), rest, m_rightSplit, center,
-                 right);
-
-    DrawOutliner(ui, left);
-
-    // Viewport.
-    Rect vp = ui.PanelWithTitle(center, "Viewport");
-    m_viewportRect = vp;
-    if (m_viewport) {
-        ui.Image(m_viewport, vp);
-    } else {
-        ui.Panel(vp, Color::RGB(18, 20, 24));
-        ui.LabelIn(vp, "3D Viewport", t.textDim, Align::Center);
-    }
-    UpdateCameraAndGizmo(ui, vp);
-
-    DrawInspector(ui, right);
-
-    // Console.
-    Rect con = ui.PanelWithTitle(console, "Console");
-    ui.LabelIn({con.x + 12, con.y + 8, con.w - 20, 22}, "Luma Editor ready.",
-               t.textDim);
+    // Dockable panels fill the workspace below the toolbar.
+    m_dock.Draw(ui, {0, 68.0f, width, height - 68.0f});
 }
 
-void EditorScreen::DrawOutliner(Slate::Context& ui, const Rect& rect) {
+void EditorScreen::DrawViewportContent(Slate::Context& ui, const Rect& rect) {
     Slate::Theme& t = ui.theme();
-    Rect body = ui.PanelWithTitle(rect, "World Outliner");
+    m_viewportRect = rect;
+    if (m_viewport) {
+        ui.Image(m_viewport, rect);
+    } else {
+        ui.Panel(rect, Color::RGB(18, 20, 24));
+        ui.LabelIn(rect, "3D Viewport", t.textDim, Align::Center);
+    }
+    UpdateCameraAndGizmo(ui, rect);
+}
+
+void EditorScreen::DrawConsoleContent(Slate::Context& ui, const Rect& rect) {
+    ui.LabelIn({rect.x + 12, rect.y + 8, rect.w - 20, 22}, "Luma Editor ready.",
+               ui.theme().textDim);
+}
+
+void EditorScreen::DrawOutlinerContent(Slate::Context& ui, const Rect& body) {
+    Slate::Theme& t = ui.theme();
     if (ui.Button(Slate::Context::ID("outliner.add"),
-                  {rect.Right() - 52, rect.y + 2, 44, 22}, "+ Add")) {
+                  {body.Right() - 52, body.y + 4, 44, 22}, "+ Add")) {
         AddEntity();
     }
 
@@ -207,7 +221,7 @@ void EditorScreen::DrawOutliner(Slate::Context& ui, const Rect& rect) {
                    t.textDim);
         return;
     }
-    f32 y = body.y + 6.0f;
+    f32 y = body.y + 32.0f;  // below the +Add button
     for (Entity e : view) {
         const std::string& name = view.get<const NameComponent>(e).name;
         Rect row{body.x + 4, y, body.w - 8, 24};
@@ -219,9 +233,8 @@ void EditorScreen::DrawOutliner(Slate::Context& ui, const Rect& rect) {
     }
 }
 
-void EditorScreen::DrawInspector(Slate::Context& ui, const Rect& rect) {
+void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
     Slate::Theme& t = ui.theme();
-    Rect body = ui.PanelWithTitle(rect, "Inspector");
 
     if (!m_scene.IsValid(m_selected)) {
         ui.LabelIn({body.x, body.y + 8, body.w, 22}, "  No selection",

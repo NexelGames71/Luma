@@ -12,6 +12,7 @@
 #include "Luma/RHI/Renderer.h"
 #include "Luma/Scene/Scene.h"
 #include "Luma/Slate/Context.h"
+#include "Luma/Slate/DockSpace.h"
 
 namespace Luma {
 
@@ -42,9 +43,12 @@ public:
 
 private:
     void AddEntity();
+    void BuildDock();
     void UpdateCameraAndGizmo(Slate::Context& ui, const Slate::Rect& viewport);
-    void DrawOutliner(Slate::Context& ui, const Slate::Rect& rect);
-    void DrawInspector(Slate::Context& ui, const Slate::Rect& rect);
+    void DrawOutlinerContent(Slate::Context& ui, const Slate::Rect& rect);
+    void DrawViewportContent(Slate::Context& ui, const Slate::Rect& rect);
+    void DrawInspectorContent(Slate::Context& ui, const Slate::Rect& rect);
+    void DrawConsoleContent(Slate::Context& ui, const Slate::Rect& rect);
 
     std::optional<Project> m_project;
     std::string m_title;
@@ -70,10 +74,8 @@ private:
     f32 m_farZ = 500.0f;
     f32 m_gizmoScale = 1.0f;
 
-    // Dock split ratios (draggable; persist).
-    f32 m_consoleSplit = 0.74f;
-    f32 m_leftSplit = 0.2f;
-    f32 m_rightSplit = 0.78f;
+    Slate::DockSpace m_dock;
+    bool m_dockBuilt = false;
 
     Slate::Rect m_viewportRect{};
     TextureHandle m_viewport = 0;

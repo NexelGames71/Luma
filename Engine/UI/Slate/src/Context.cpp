@@ -167,6 +167,9 @@ void Context::Image(TextureHandle texture, const Rect& rect, Color tint) {
     m_draw.AddImage(texture, rect, Rect{0.0f, 0.0f, 1.0f, 1.0f}, tint);
 }
 
+void Context::PushClip(const Rect& rect) { m_draw.PushClip(rect); }
+void Context::PopClip() { m_draw.PopClip(); }
+
 void Context::ImageUV(TextureHandle texture, const Rect& rect, const Rect& uv,
                       Color tint) {
     m_draw.AddImage(texture, rect, uv, tint);
