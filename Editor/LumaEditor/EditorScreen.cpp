@@ -21,7 +21,6 @@ EditorScreen::EditorScreen(const std::filesystem::path& projectFile) {
         m_title = "Luma Editor";
         LUMA_LOG_ERROR("Editor", "could not open project: {}", err);
     }
-    m_grid.Build();
 }
 
 SceneView EditorScreen::BuildSceneView() {
@@ -30,6 +29,9 @@ SceneView EditorScreen::BuildSceneView() {
         m_camTarget.x + m_camDistance * std::cos(m_camPitch) * std::sin(m_camYaw),
         m_camTarget.y + m_camDistance * std::sin(m_camPitch),
         m_camTarget.z + m_camDistance * std::cos(m_camPitch) * std::cos(m_camYaw)};
+
+    // Infinite grid: recentre on the camera focus (fades with distance).
+    m_grid.Build(m_camTarget);
 
     SceneView scene;
     scene.view = LookAt(eye, m_camTarget, Vec3(0.0f, 1.0f, 0.0f));
