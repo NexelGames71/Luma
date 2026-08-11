@@ -86,12 +86,29 @@ struct SkyParams {
     bool enabled = false;
 };
 
+// Infinite editor ground grid, drawn by the backend as an analytic fullscreen
+// ground-plane pass (ray-cast the Y=0 plane, screen-space derivative AA), so it
+// is genuinely infinite. `fadeStart/End` are radial world distances the caller
+// scales with the camera so the grid always fills the view at any zoom.
+struct GridParams {
+    Math::Vec3 minorColor{0.26f, 0.28f, 0.33f};
+    Math::Vec3 majorColor{0.42f, 0.46f, 0.54f};
+    Math::Vec3 axisX{0.88f, 0.26f, 0.30f};  // line where z = 0
+    Math::Vec3 axisZ{0.26f, 0.54f, 0.94f};  // line where x = 0
+    f32 cellSize = 1.0f;                     // minor cell world size
+    i32 majorEvery = 10;                     // heavier line every N cells
+    f32 fadeStart = 40.0f;
+    f32 fadeEnd = 340.0f;
+    bool enabled = false;
+};
+
 // Camera + everything to render for one viewport frame. The backend builds the
 // projection from the fov and the target size, so callers only supply the view.
 // Line data is produced by separate modules (e.g. Luma::Grid, Luma::Gizmo) and
 // handed in here — the renderer stays feature-agnostic.
 struct SceneView {
     SkyParams sky;
+    GridParams grid;
 
     Math::Mat4 view = Math::Mat4::Identity();
     f32 fovYRadians = 0.9f;

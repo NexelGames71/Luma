@@ -12,6 +12,7 @@ add_library(LumaRenderVulkan STATIC
     src/Vulkan/UI/VulkanUIPass.cpp
     src/Vulkan/Scene/VulkanSceneView.cpp
     src/Vulkan/Sky/VulkanSkyPass.cpp
+    src/Vulkan/Grid/VulkanGridPass.cpp
     src/Vulkan/VulkanRenderer.cpp)
 
 add_library(Luma::RenderVulkan ALIAS LumaRenderVulkan)
@@ -26,7 +27,8 @@ if(NOT Vulkan_GLSLC_EXECUTABLE)
 endif()
 
 set(_luma_spv_outputs)
-foreach(shader ui.vert ui.frag scene.vert scene.frag sky.vert sky.frag)
+foreach(shader ui.vert ui.frag scene.vert scene.frag sky.vert sky.frag
+               grid.vert grid.frag)
     add_custom_command(
         OUTPUT ${_luma_shader_out}/${shader}.spv
         COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3

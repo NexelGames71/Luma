@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "Luma/Gizmo/TranslateGizmo.h"
-#include "Luma/Grid/Grid.h"
 #include "Luma/Math/Math.h"
 #include "Luma/Project/Project.h"
 #include "Luma/RHI/Renderer.h"
@@ -61,7 +60,6 @@ private:
     int m_nextNumber = 1;
     bool m_showAddMenu = false;  // inspector "Add Component" popup
 
-    Grid m_grid;
     TranslateGizmo m_gizmo;
     std::vector<SceneInstance> m_instances;  // rebuilt each frame
 

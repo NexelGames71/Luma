@@ -86,6 +86,8 @@ VulkanSceneView::VulkanSceneView(VkPhysicalDevice physical, VkDevice device,
         CreatePipeline(shaderDir, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false, false);
     m_skyPass = std::make_unique<VulkanSkyPass>(device, shaderDir, m_samples,
                                                 kColorFormat, kDepthFormat);
+    m_gridPass = std::make_unique<VulkanGridPass>(
+        physical, device, shaderDir, m_samples, kColorFormat, kDepthFormat);
 }
 
 VulkanSceneView::~VulkanSceneView() {
@@ -440,8 +442,12 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
     if (scene.sky.enabled) {
         m_skyPass->Record(m_cmd, scene.sky, scene.view, viewProj);
     }
+    // Infinite ground grid (analytic plane pass, over the sky, depth-written).
+    if (scene.grid.enabled) {
+        m_gridPass->Record(m_cmd, scene.grid, scene.view, viewProj);
+    }
 
-    // Depth-tested lines (grid).
+    // Depth-tested lines (legacy line channel; unused by the editor grid now).
     if (scene.lineVertexCount) {
         push.mvp = viewProj;
         vkCmdBindPipeline(m_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_linePipeline);

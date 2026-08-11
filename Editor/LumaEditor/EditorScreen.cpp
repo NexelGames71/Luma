@@ -62,8 +62,6 @@ SceneView EditorScreen::BuildSceneView() {
     m_view = LookAt(eye, m_camTarget, Vec3(0.0f, 1.0f, 0.0f));
     m_gizmoScale = m_camDistance * 0.14f;
 
-    m_grid.Build(m_camTarget);
-
     // Entity instances.
     m_instances.clear();
     auto view = m_scene.Registry().view<TransformComponent, MeshRendererComponent>();
@@ -95,12 +93,18 @@ SceneView EditorScreen::BuildSceneView() {
         break;
     }
 
+    // Infinite analytic ground grid; fade radius scales with the camera so it
+    // always fills the view at any zoom (no fixed extent).
+    scene.grid.enabled = true;
+    scene.grid.cellSize = 1.0f;
+    scene.grid.majorEvery = 10;
+    scene.grid.fadeStart = m_camDistance * 3.0f;
+    scene.grid.fadeEnd = m_camDistance * 60.0f;
+
     scene.view = m_view;
     scene.fovYRadians = m_fovY;
     scene.nearZ = m_nearZ;
     scene.farZ = m_farZ;
-    scene.lines = m_grid.Lines().data();
-    scene.lineVertexCount = m_grid.VertexCount();
     scene.instances = m_instances.data();
     scene.instanceCount = static_cast<u32>(m_instances.size());
 
