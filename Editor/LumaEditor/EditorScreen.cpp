@@ -32,7 +32,7 @@ EditorScreen::EditorScreen(const std::filesystem::path& projectFile) {
     }
 
     // Every world starts with an Environment game object; its Environment
-    // component (attached by default) drives the sky/atmosphere.
+    // component (attached by default) drives the sky/atmosphere and lighting.
     CreateEnvironment();
 }
 
@@ -45,8 +45,8 @@ void EditorScreen::AddEntity() {
     int index = m_nextNumber++;
     Entity e = m_scene.CreateEntity("Cube " + std::to_string(index));
     auto& mesh = m_scene.Registry().emplace<MeshRendererComponent>(e);
-    mesh.color = kEntityPalette[(index - 1) %
-                                (sizeof(kEntityPalette) / sizeof(Math::Vec3))];
+    mesh.albedo = kEntityPalette[(index - 1) %
+                                 (sizeof(kEntityPalette) / sizeof(Math::Vec3))];
     // Space new entities out along X so they don't overlap.
     auto& tf = m_scene.Registry().get<TransformComponent>(e);
     tf.position = Math::Vec3(static_cast<f32>(index - 1) * 2.0f, 1.0f, 0.0f);
@@ -66,14 +66,18 @@ SceneView EditorScreen::BuildSceneView() {
     m_instances.clear();
     auto view = m_scene.Registry().view<TransformComponent, MeshRendererComponent>();
     for (Entity e : view) {
+        const auto& mr = view.get<MeshRendererComponent>(e);
         SceneInstance inst;
         inst.model = view.get<TransformComponent>(e).Matrix();
-        Vec3 c = view.get<MeshRendererComponent>(e).color;
+        inst.primitive = mr.primitive;
+        Vec3 c = mr.albedo;
         if (e == m_selected) {
-            c = Vec3(std::min(1.0f, c.x + 0.25f), std::min(1.0f, c.y + 0.25f),
-                     std::min(1.0f, c.z + 0.25f));
+            c = Vec3(std::min(1.0f, c.x + 0.20f), std::min(1.0f, c.y + 0.20f),
+                     std::min(1.0f, c.z + 0.20f));
         }
-        inst.color = c;
+        inst.albedo = c;
+        inst.metallic = mr.metallic;
+        inst.roughness = mr.roughness;
         m_instances.push_back(inst);
     }
 
@@ -90,6 +94,13 @@ SceneView EditorScreen::BuildSceneView() {
         scene.sky.sunIntensity = env.sunIntensity;
         scene.sky.skyIntensity = env.skyIntensity;
         scene.sky.sunSizeDegrees = env.sunSizeDegrees;
+
+        // Same sun lights the meshes; sky drives the IBL ambient.
+        scene.lighting.sunDirection = env.sunDirection;
+        scene.lighting.sunColor = env.sunColor;
+        scene.lighting.sunIntensity = env.sunIntensity * 3.0f;
+        scene.lighting.groundColor = env.groundColor;
+        scene.lighting.iblIntensity = env.skyIntensity;
         break;
     }
 
@@ -330,7 +341,21 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
     if (reg.all_of<MeshRendererComponent>(m_selected)) {
         sectionHeader("Mesh Renderer");
         auto& mr = reg.get<MeshRendererComponent>(m_selected);
-        vec3Row("Color", Slate::Context::ID("insp.col"), &mr.color.x);
+        // Primitive shape selector (segmented tabs).
+        ui.LabelIn({x, y, 82, 22}, "Shape", t.textDim);
+        const char* shapes[4] = {"Cube", "Plane", "Sphere", "Cylinder"};
+        f32 bw = (w - 82.0f) / 4.0f;
+        for (int p = 0; p < 4; ++p) {
+            Rect r{x + 82.0f + bw * static_cast<f32>(p), y, bw - 2.0f, 22};
+            bool sel = static_cast<int>(mr.primitive) == p;
+            if (ui.Tab(Slate::Context::ID(shapes[p]), r, shapes[p], sel)) {
+                mr.primitive = static_cast<MeshPrimitive>(p);
+            }
+        }
+        y += 28.0f;
+        vec3Row("Albedo", Slate::Context::ID("insp.alb"), &mr.albedo.x);
+        floatRow("Metallic", Slate::Context::ID("insp.met"), mr.metallic);
+        floatRow("Roughness", Slate::Context::ID("insp.rgh"), mr.roughness);
         y += 8.0f;
     }
     if (reg.all_of<EnvironmentComponent>(m_selected)) {
@@ -341,6 +366,8 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
         y += 26.0f;
         vec3Row("Sun Dir", Slate::Context::ID("insp.sundir"),
                 &env.sunDirection.x);
+        vec3Row("Sun Color", Slate::Context::ID("insp.suncol"),
+                &env.sunColor.x);
         vec3Row("Ground", Slate::Context::ID("insp.ground"),
                 &env.groundColor.x);
         floatRow("Turbidity", Slate::Context::ID("insp.turb"), env.turbidity);

@@ -28,7 +28,7 @@ endif()
 
 set(_luma_spv_outputs)
 foreach(shader ui.vert ui.frag scene.vert scene.frag sky.vert sky.frag
-               grid.vert grid.frag)
+               grid.vert grid.frag line.vert line.frag)
     add_custom_command(
         OUTPUT ${_luma_shader_out}/${shader}.spv
         COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3
@@ -50,7 +50,7 @@ target_include_directories(LumaRenderVulkan
 
 target_link_libraries(LumaRenderVulkan
     PUBLIC Luma::Core Luma::RHI Luma::Platform
-    PRIVATE Vulkan::Vulkan Luma::Math)
+    PRIVATE Vulkan::Vulkan Luma::Math Luma::Mesh)
 
 # Let the engine locate the SDK's validation layer even when it isn't registered
 # with the loader (common on machines without VULKAN_SDK set globally).

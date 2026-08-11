@@ -11,11 +11,10 @@
 
 namespace Luma {
 
-// Generic offscreen scene renderer: draws cube instances (triangles), plus two
-// line channels (depth-tested and overlay) that feature modules (grid, gizmo)
-// fill via SceneView. The color target is exposed as a UI-sampleable texture.
-// This class is feature-agnostic: it renders primitives, not "grids" or
-// "gizmos".
+// Generic offscreen scene renderer: draws PBR mesh instances (built-in
+// primitives) lit by a sun + sky IBL, plus a no-depth line channel for the
+// gizmo overlay. Sky and grid are delegated to their own pass modules. This
+// class renders primitives from SceneView data; it is feature-agnostic.
 class VulkanSceneView {
 public:
     VulkanSceneView(VkPhysicalDevice physical, VkDevice device, VkQueue queue,
@@ -31,11 +30,11 @@ public:
 private:
     void CreateTargets(u32 width, u32 height);
     void DestroyTargets();
-    void CreatePipelineLayout();
-    VkPipeline CreatePipeline(const std::string& shaderDir,
-                              VkPrimitiveTopology topology, bool depthTest,
-                              bool depthWrite);
-    void CreateGeometry();
+    void CreateLayouts();
+    void CreateSceneUBO();
+    VkPipeline CreateMeshPipeline(const std::string& shaderDir);
+    VkPipeline CreateLinePipeline(const std::string& shaderDir, bool depthTest);
+    void CreatePrimitives();
     void UploadLines(GpuBuffer& buffer, const LineVertex* lines, u32 count);
 
     VkPhysicalDevice m_physical;
@@ -47,29 +46,42 @@ private:
     VkCommandBuffer m_cmd = VK_NULL_HANDLE;
     VkFence m_fence = VK_NULL_HANDLE;
 
-    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-    VkPipeline m_trianglePipeline = VK_NULL_HANDLE;
-    VkPipeline m_linePipeline = VK_NULL_HANDLE;      // depth-tested lines (grid)
-    VkPipeline m_overlayPipeline = VK_NULL_HANDLE;   // no-depth lines (gizmo)
+    // Lit mesh path: per-frame UBO (camera + lighting) + per-instance push.
+    VkDescriptorSetLayout m_uboSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_uboPool = VK_NULL_HANDLE;
+    VkDescriptorSet m_uboSet = VK_NULL_HANDLE;
+    GpuBuffer m_ubo;
+    VkPipelineLayout m_meshLayout = VK_NULL_HANDLE;
+    VkPipeline m_meshPipeline = VK_NULL_HANDLE;
+
+    // Built-in primitive meshes (indexed by MeshPrimitive).
+    struct Primitive {
+        GpuBuffer vertexBuffer;
+        GpuBuffer indexBuffer;
+        u32 indexCount = 0;
+    };
+    static constexpr u32 kPrimitiveCount = 4;
+    Primitive m_primitives[kPrimitiveCount];
+
+    // Line path (gizmo overlay): simple mvp+tint push, its own shader.
+    VkPipelineLayout m_lineLayout = VK_NULL_HANDLE;
+    VkPipeline m_linePipeline = VK_NULL_HANDLE;     // depth-tested lines
+    VkPipeline m_overlayPipeline = VK_NULL_HANDLE;  // no-depth lines
+    GpuBuffer m_lineBuffer;
+    GpuBuffer m_overlayBuffer;
 
     std::unique_ptr<VulkanSkyPass> m_skyPass;    // its own module (Sky/)
     std::unique_ptr<VulkanGridPass> m_gridPass;  // its own module (Grid/)
 
-    GpuBuffer m_vertexBuffer;  // cube mesh
-    GpuBuffer m_indexBuffer;
-    GpuBuffer m_lineBuffer;     // dynamic, per-frame
-    GpuBuffer m_overlayBuffer;  // dynamic, per-frame
-
-    // Offscreen targets. Rendering is multisampled (m_samples) into the MSAA
-    // color + depth images, then resolved into m_color, which the UI samples.
+    // Offscreen targets (MSAA color+depth resolved to m_color for the UI).
     VkSampleCountFlagBits m_samples = VK_SAMPLE_COUNT_1_BIT;
-    VkImage m_color = VK_NULL_HANDLE;  // 1x resolve target (sampled by UI)
+    VkImage m_color = VK_NULL_HANDLE;
     VkDeviceMemory m_colorMem = VK_NULL_HANDLE;
     VkImageView m_colorView = VK_NULL_HANDLE;
     VkImage m_msaaColor = VK_NULL_HANDLE;
     VkDeviceMemory m_msaaColorMem = VK_NULL_HANDLE;
     VkImageView m_msaaColorView = VK_NULL_HANDLE;
-    VkImage m_depth = VK_NULL_HANDLE;  // multisampled depth
+    VkImage m_depth = VK_NULL_HANDLE;
     VkDeviceMemory m_depthMem = VK_NULL_HANDLE;
     VkImageView m_depthView = VK_NULL_HANDLE;
     u32 m_width = 0;

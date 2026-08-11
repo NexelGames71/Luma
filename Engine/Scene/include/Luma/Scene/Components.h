@@ -3,6 +3,7 @@
 #include <string>
 
 #include "Luma/Math/Math.h"
+#include "Luma/RHI/Renderer.h"
 
 // Core scene components stored in the ECS registry. More components (Camera,
 // Light, Collider, ...) are added as their subsystems come online.
@@ -26,10 +27,13 @@ struct TransformComponent {
     }
 };
 
-// Marks an entity as drawing a mesh. For now the only mesh is the built-in cube;
-// a mesh/material asset reference replaces `color` as the asset system lands.
+// Marks an entity as drawing a built-in primitive mesh with a PBR material.
+// Mesh/material asset references replace these as the asset system lands.
 struct MeshRendererComponent {
-    Math::Vec3 color{0.80f, 0.80f, 0.85f};
+    MeshPrimitive primitive = MeshPrimitive::Cube;
+    Math::Vec3 albedo{0.82f, 0.82f, 0.85f};  // base color (linear)
+    f32 metallic = 0.0f;
+    f32 roughness = 0.5f;
 };
 
 // Drives the world's sky/atmosphere. Attached by default to an Environment game
@@ -37,6 +41,7 @@ struct MeshRendererComponent {
 // values (see Luma::SkyParams / the Vulkan sky pass).
 struct EnvironmentComponent {
     Math::Vec3 sunDirection{0.35f, 0.65f, 0.55f};  // world dir TO the sun
+    Math::Vec3 sunColor{1.0f, 0.96f, 0.9f};        // sun light color
     Math::Vec3 groundColor{0.11f, 0.12f, 0.14f};   // below the horizon
     f32 turbidity = 2.6f;                          // atmospheric haze (1..10)
     f32 sunIntensity = 1.0f;                       // sun-disk brightness

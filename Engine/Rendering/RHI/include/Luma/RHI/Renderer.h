@@ -59,10 +59,30 @@ struct UIDrawData {
 
 // --- 3D scene view (rendered into an offscreen target for the viewport) -----
 
-// One cube instance: its world transform and RGB color.
+// Built-in mesh shapes the backend can draw. Real mesh assets replace this as
+// the asset pipeline lands; feature modules generate the geometry (Luma::Mesh).
+enum class MeshPrimitive { Cube, Plane, Sphere, Cylinder };
+
+// One mesh instance: world transform, which primitive, and a PBR material.
 struct SceneInstance {
     Math::Mat4 model = Math::Mat4::Identity();
-    Math::Vec3 color{0.8f, 0.8f, 0.85f};
+    MeshPrimitive primitive = MeshPrimitive::Cube;
+    Math::Vec3 albedo{0.82f, 0.82f, 0.85f};  // base color (linear)
+    f32 metallic = 0.0f;
+    f32 roughness = 0.5f;
+};
+
+// Analytic lighting + image-based-lighting environment, fed per frame. The sun
+// comes from the Environment; the sky colors approximate the environment
+// irradiance/reflection used for IBL (diffuse + specular ambient).
+struct LightingParams {
+    Math::Vec3 sunDirection{0.35f, 0.65f, 0.55f};  // world dir TO the sun
+    Math::Vec3 sunColor{1.0f, 0.96f, 0.9f};
+    f32 sunIntensity = 3.0f;
+    Math::Vec3 skyZenith{0.20f, 0.34f, 0.62f};   // IBL: up
+    Math::Vec3 skyHorizon{0.62f, 0.68f, 0.78f};  // IBL: horizon
+    Math::Vec3 groundColor{0.16f, 0.16f, 0.17f};  // IBL: below horizon
+    f32 iblIntensity = 1.0f;
 };
 
 // A world-space line-segment vertex (two per segment). Feature modules (grid,
@@ -109,6 +129,7 @@ struct GridParams {
 struct SceneView {
     SkyParams sky;
     GridParams grid;
+    LightingParams lighting;
 
     Math::Mat4 view = Math::Mat4::Identity();
     f32 fovYRadians = 0.9f;
