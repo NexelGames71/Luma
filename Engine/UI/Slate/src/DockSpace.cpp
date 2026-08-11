@@ -236,15 +236,34 @@ void DockSpace::DrawNode(Context& ctx, Node* n) {
     }
     Rect aRect, bRect;
     u64 sid = static_cast<u64>(reinterpret_cast<uptr>(n));
+    bool dragging;
     if (n->horizontal) {
-        ctx.SplitterV(sid, n->rect, n->ratio, aRect, bRect);
+        dragging = ctx.SplitterV(sid, n->rect, n->ratio, aRect, bRect);
     } else {
-        ctx.SplitterH(sid, n->rect, n->ratio, aRect, bRect);
+        dragging = ctx.SplitterH(sid, n->rect, n->ratio, aRect, bRect);
     }
     n->a->rect = aRect;
     n->b->rect = bRect;
     DrawNode(ctx, n->a.get());
     DrawNode(ctx, n->b.get());
+
+    // Separator drawn on top of the panels (they fill their rects and would
+    // otherwise cover the splitter's own line). Accent while hovered/dragging.
+    Theme& t = ctx.theme();
+    Vec2 m = ctx.mouse();
+    if (n->horizontal) {
+        f32 sx = bRect.x;
+        bool hovered = m.x >= sx - 4.0f && m.x <= sx + 4.0f &&
+                       m.y >= n->rect.y && m.y <= n->rect.Bottom();
+        ctx.Panel({sx - 0.5f, n->rect.y, 1.0f, n->rect.h},
+                  (hovered || dragging) ? t.accent : t.panelBorder);
+    } else {
+        f32 sy = bRect.y;
+        bool hovered = m.y >= sy - 4.0f && m.y <= sy + 4.0f &&
+                       m.x >= n->rect.x && m.x <= n->rect.Right();
+        ctx.Panel({n->rect.x, sy - 0.5f, n->rect.w, 1.0f},
+                  (hovered || dragging) ? t.accent : t.panelBorder);
+    }
 }
 
 void DockSpace::Draw(Context& ctx, const Rect& area) {
