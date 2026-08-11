@@ -6,20 +6,6 @@ namespace Luma::Slate {
 namespace {
 constexpr f32 kTabBarH = 26.0f;
 
-DockDir ZoneAt(const Rect& r, Vec2 p) {
-    f32 fx = (p.x - r.x) / r.w;
-    f32 fy = (p.y - r.y) / r.h;
-    if (fx > 0.33f && fx < 0.67f && fy > 0.33f && fy < 0.67f) {
-        return DockDir::Center;
-    }
-    f32 dl = fx, dr = 1.0f - fx, dt = fy, db = 1.0f - fy;
-    f32 m = std::min(std::min(dl, dr), std::min(dt, db));
-    if (m == dl) return DockDir::Left;
-    if (m == dr) return DockDir::Right;
-    if (m == dt) return DockDir::Up;
-    return DockDir::Down;
-}
-
 Rect ZoneRect(const Rect& r, DockDir dir) {
     switch (dir) {
         case DockDir::Left:  return {r.x, r.y, r.w * 0.5f, r.h};
@@ -28,6 +14,31 @@ Rect ZoneRect(const Rect& r, DockDir dir) {
         case DockDir::Down:  return {r.x, r.y + r.h * 0.5f, r.w, r.h * 0.5f};
         default:             return r;
     }
+}
+
+// One pod of the Luma dock compass: a rounded chip holding a mini-layout glyph
+// that previews where the panel lands (shaded half, or a tab strip for Center).
+void DrawDockPod(Context& ctx, const Rect& btn, DockDir dir, const Theme& t,
+                 bool hovered) {
+    Color base = Color::RGBA(30, 34, 42, 240);
+    Color border = hovered ? t.accent : Color::RGBA(92, 100, 114, 255);
+    ctx.PanelRoundedBordered(btn, base, border, 9.0f, hovered ? 2.0f : 1.0f);
+
+    Rect g{btn.x + 9.0f, btn.y + 9.0f, btn.w - 18.0f, btn.h - 18.0f};
+    ctx.PanelRounded(g, Color::RGBA(255, 255, 255, hovered ? 26 : 16), 3.0f);
+
+    Color shade = hovered ? t.accent : Color::RGBA(90, 150, 220, 200);
+    Rect s = g;
+    switch (dir) {
+        case DockDir::Left:  s.w = g.w * 0.5f; break;
+        case DockDir::Right: s.x = g.x + g.w * 0.5f; s.w = g.w * 0.5f; break;
+        case DockDir::Up:    s.h = g.h * 0.5f; break;
+        case DockDir::Down:  s.y = g.y + g.h * 0.5f; s.h = g.h * 0.5f; break;
+        case DockDir::Center: s.h = 4.0f; break;  // tab strip = tabify
+    }
+    ctx.Panel(s, shade);
+    ctx.PanelRoundedBordered(g, Color::RGBA(0, 0, 0, 0),
+                             Color::RGBA(210, 216, 226, 255), 3.0f, 1.0f);
 }
 }  // namespace
 
@@ -280,17 +291,56 @@ void DockSpace::Draw(Context& ctx, const Rect& area) {
         }
         if (m_dragging) {
             ctx.RequestCursor(CursorShape::Hand);
+            Theme& t = ctx.theme();
             Node* target = LeafUnderPoint(m_root.get(), m);
+            m_pending.active = false;
             if (target) {
-                DockDir dir = ZoneAt(target->rect, m);
-                Rect zr = ZoneRect(target->rect, dir);
-                // Drop-zone overlay.
-                ctx.Panel(zr, Color::RGBA(60, 140, 220, 90));
-                ctx.PanelBordered(zr, Color::RGBA(0, 0, 0, 0), ctx.theme().accent,
-                                  2.0f);
-                m_pending = PendingDock{true, m_dragPanel, target, dir};
-            } else {
-                m_pending.active = false;
+                // Luma dock compass: a center pod (tabify) surrounded by four
+                // directional pods, laid out over the hovered panel's center.
+                const f32 bs = 42.0f, gap = 8.0f, off = bs + gap;
+                f32 cx = target->rect.x + target->rect.w * 0.5f;
+                f32 cy = target->rect.y + target->rect.h * 0.5f;
+                struct Slot { DockDir dir; Rect btn; };
+                Slot slots[5] = {
+                    {DockDir::Center, {cx - bs / 2, cy - bs / 2, bs, bs}},
+                    {DockDir::Left, {cx - bs / 2 - off, cy - bs / 2, bs, bs}},
+                    {DockDir::Right, {cx - bs / 2 + off, cy - bs / 2, bs, bs}},
+                    {DockDir::Up, {cx - bs / 2, cy - bs / 2 - off, bs, bs}},
+                    {DockDir::Down, {cx - bs / 2, cy - bs / 2 + off, bs, bs}},
+                };
+
+                // Which pod is the cursor over?
+                DockDir hoverDir = DockDir::Center;
+                bool anyHover = false;
+                for (const Slot& s : slots) {
+                    if (s.btn.Contains(m)) {
+                        hoverDir = s.dir;
+                        anyHover = true;
+                    }
+                }
+
+                // Preview the resulting region under the compass.
+                if (anyHover) {
+                    Rect zr = ZoneRect(target->rect, hoverDir);
+                    ctx.Panel(zr, Color::RGBA(60, 140, 220, 70));
+                    ctx.PanelBordered(zr, Color::RGBA(0, 0, 0, 0), t.accent, 2.0f);
+                    m_pending = PendingDock{true, m_dragPanel, target, hoverDir};
+                }
+
+                // A rounded backing plate + soft glow ring behind the pods.
+                f32 span = off + bs / 2;
+                Rect glow{cx - span - 10.0f, cy - span - 10.0f,
+                          2 * span + 20.0f, 2 * span + 20.0f};
+                ctx.PanelRounded(glow, Color::RGBA(20, 120, 220, 40), 18.0f);
+                Rect plate{cx - span - 4.0f, cy - span - 4.0f, 2 * span + 8.0f,
+                           2 * span + 8.0f};
+                ctx.PanelRoundedBordered(plate, Color::RGBA(22, 25, 32, 235),
+                                         Color::RGBA(70, 78, 92, 255), 14.0f, 1.0f);
+
+                for (const Slot& s : slots) {
+                    DrawDockPod(ctx, s.btn, s.dir, t,
+                                anyHover && s.dir == hoverDir);
+                }
             }
             // A floating "ghost" label following the cursor.
             auto it = m_panels.find(m_dragPanel);
