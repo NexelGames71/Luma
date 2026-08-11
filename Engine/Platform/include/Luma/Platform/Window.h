@@ -7,6 +7,7 @@
 
 #include "Luma/Core/Event.h"
 #include "Luma/Core/Types.h"
+#include "Luma/Platform/Cursor.h"
 
 // Abstract window/OS surface. The concrete backend (GLFW today) is created
 // through Window::Create and never appears in this header, so the rest of the
@@ -37,6 +38,9 @@ public:
 
     // Sets the window/taskbar icon from tightly-packed RGBA8 pixels.
     virtual void SetIcon(u32 width, u32 height, const void* rgba8Pixels) = 0;
+
+    // Sets the mouse cursor shape.
+    virtual void SetCursor(CursorShape shape) = 0;
 
     // Native OS handle (GLFWwindow* today) for interop; nullptr if unavailable.
     virtual void* NativeHandle() const = 0;

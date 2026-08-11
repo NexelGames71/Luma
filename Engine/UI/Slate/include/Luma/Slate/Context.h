@@ -3,6 +3,7 @@
 #include <string>
 #include <string_view>
 
+#include "Luma/Platform/Cursor.h"
 #include "Luma/RHI/Renderer.h"
 #include "Luma/Slate/DrawList.h"
 #include "Luma/Slate/Font.h"
@@ -118,6 +119,11 @@ public:
     bool isMouseDown(int button) const {
         return button >= 0 && button < 3 ? m_mouseDown[button] : false;
     }
+
+    // Cursor the UI wants this frame (reset to Arrow each BeginFrame); the app
+    // applies it via Window::SetCursor after building the UI.
+    void RequestCursor(CursorShape shape) { m_requestedCursor = shape; }
+    CursorShape RequestedCursor() const { return m_requestedCursor; }
     bool mousePressed(int button) const {
         return button >= 0 && button < 3 ? m_mousePressed[button] : false;
     }
@@ -146,6 +152,7 @@ private:
     bool m_keyLeft = false, m_keyRight = false;
     bool m_keyHome = false, m_keyEnd = false, m_keyEnter = false;
 
+    CursorShape m_requestedCursor = CursorShape::Arrow;
     u64 m_hot = 0;
     u64 m_active = 0;
     u64 m_focus = 0;

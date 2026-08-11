@@ -58,16 +58,37 @@ GlfwWindow::GlfwWindow(const WindowProps& props) {
     glfwSetWindowUserPointer(m_window, &m_data);
     InstallCallbacks();
 
+    // Standard cursors, indexed by CursorShape.
+    m_cursors[static_cast<int>(CursorShape::Arrow)] =
+        glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+    m_cursors[static_cast<int>(CursorShape::ResizeEW)] =
+        glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+    m_cursors[static_cast<int>(CursorShape::ResizeNS)] =
+        glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
+    m_cursors[static_cast<int>(CursorShape::Hand)] =
+        glfwCreateStandardCursor(GLFW_HAND_CURSOR);
+    m_cursors[static_cast<int>(CursorShape::IBeam)] =
+        glfwCreateStandardCursor(GLFW_IBEAM_CURSOR);
+
     LUMA_LOG_INFO("Window", "created '{}' ({}x{})", m_data.title, m_data.width,
                   m_data.height);
 }
 
 GlfwWindow::~GlfwWindow() {
+    for (GLFWcursor* cursor : m_cursors) {
+        if (cursor) glfwDestroyCursor(cursor);
+    }
     if (m_window) {
         glfwDestroyWindow(m_window);
         --g_glfwWindowCount;
         if (g_glfwWindowCount == 0) glfwTerminate();
     }
+}
+
+void GlfwWindow::SetCursor(CursorShape shape) {
+    if (!m_window || shape == m_currentCursor) return;
+    m_currentCursor = shape;
+    glfwSetCursor(m_window, m_cursors[static_cast<int>(shape)]);
 }
 
 void GlfwWindow::InstallCallbacks() {

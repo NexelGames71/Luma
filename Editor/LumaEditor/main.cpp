@@ -232,6 +232,7 @@ int main(int argc, char** argv) {
         }
 
         renderer->DrawUI(ui.EndFrame());
+        window->SetCursor(ui.RequestedCursor());
 
         if (!screenshotPath.empty() && frameCount == kCaptureFrame) {
             renderer->CaptureFrame(screenshotPath);

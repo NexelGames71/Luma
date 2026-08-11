@@ -7,6 +7,7 @@
 // Forward declaration only — the GLFW header is included solely in the .cpp so
 // no GLFW type leaks into any public (or engine-facing) header.
 struct GLFWwindow;
+struct GLFWcursor;
 
 namespace Luma {
 
@@ -25,6 +26,7 @@ public:
     u32 Width() const override { return m_data.width; }
     u32 Height() const override { return m_data.height; }
     void SetIcon(u32 width, u32 height, const void* rgba8Pixels) override;
+    void SetCursor(CursorShape shape) override;
     void* NativeHandle() const override;
 
     std::vector<const char*> RequiredVulkanInstanceExtensions() const override;
@@ -45,6 +47,9 @@ private:
 
     GLFWwindow* m_window = nullptr;
     WindowData m_data;
+
+    GLFWcursor* m_cursors[5] = {};  // indexed by CursorShape
+    CursorShape m_currentCursor = CursorShape::Arrow;
 };
 
 }  // namespace Luma

@@ -96,6 +96,7 @@ void Context::BeginFrame(f32 displayWidth, f32 displayHeight, f32 dt) {
     m_displayH = displayHeight;
     m_time += dt;
     m_hot = 0;
+    m_requestedCursor = CursorShape::Arrow;
     m_mouseDelta = {m_mouse.x - m_prevMouse.x, m_mouse.y - m_prevMouse.y};
     m_prevMouse = m_mouse;
     m_draw.Begin(displayWidth, displayHeight);
@@ -189,7 +190,10 @@ void Context::LabelIn(const Rect& rect, std::string_view text, Color color,
 
 bool Context::Button(u64 id, const Rect& rect, std::string_view label) {
     bool hovered = rect.Contains(m_mouse);
-    if (hovered) m_hot = id;
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::Hand;
+    }
     if (hovered && m_mousePressed[0]) m_active = id;
     bool clicked = false;
     if (m_active == id && m_mouseReleased[0]) {
@@ -241,7 +245,10 @@ bool Context::Tab(u64 id, const Rect& rect, std::string_view label,
 bool Context::TextField(u64 id, const Rect& rect, std::string& text,
                         std::string_view placeholder) {
     bool hovered = rect.Contains(m_mouse);
-    if (hovered) m_hot = id;
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::IBeam;
+    }
     if (m_mousePressed[0]) {
         if (hovered) {
             m_focus = id;
@@ -462,6 +469,7 @@ bool Context::SplitterV(u64 id, const Rect& region, f32& ratio, Rect& left,
     Rect hit{splitX - hitHalf, region.y, hitHalf * 2.0f, region.h};
     bool hovered = hit.Contains(m_mouse);
     if (hovered) m_hot = id;
+    if (hovered || m_active == id) m_requestedCursor = CursorShape::ResizeEW;
     if (hovered && m_mousePressed[0]) m_active = id;
 
     bool dragging = (m_active == id);
@@ -491,6 +499,7 @@ bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
     Rect hit{region.x, splitY - hitHalf, region.w, hitHalf * 2.0f};
     bool hovered = hit.Contains(m_mouse);
     if (hovered) m_hot = id;
+    if (hovered || m_active == id) m_requestedCursor = CursorShape::ResizeNS;
     if (hovered && m_mousePressed[0]) m_active = id;
 
     bool dragging = (m_active == id);
