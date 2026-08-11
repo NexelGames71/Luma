@@ -40,9 +40,11 @@ public:
         m_iconPause = pause;
         m_iconStop = stop;
     }
+    void SetLogoIcon(TextureHandle logo) { m_iconLogo = logo; }
 
 private:
     void AddEntity();
+    void CreateEnvironment();
     void BuildDock();
     void UpdateCameraAndGizmo(Slate::Context& ui, const Slate::Rect& viewport);
     void DrawOutlinerContent(Slate::Context& ui, const Slate::Rect& rect);
@@ -55,7 +57,9 @@ private:
 
     Scene m_scene;
     Entity m_selected = kNullEntity;
+    Entity m_environment = kNullEntity;
     int m_nextNumber = 1;
+    bool m_showAddMenu = false;  // inspector "Add Component" popup
 
     Grid m_grid;
     TranslateGizmo m_gizmo;
@@ -82,6 +86,7 @@ private:
     TextureHandle m_iconPlay = 0;
     TextureHandle m_iconPause = 0;
     TextureHandle m_iconStop = 0;
+    TextureHandle m_iconLogo = 0;
 };
 
 }  // namespace Luma

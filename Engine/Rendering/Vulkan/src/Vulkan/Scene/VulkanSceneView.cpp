@@ -84,6 +84,8 @@ VulkanSceneView::VulkanSceneView(VkPhysicalDevice physical, VkDevice device,
         CreatePipeline(shaderDir, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, true, false);
     m_overlayPipeline =
         CreatePipeline(shaderDir, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false, false);
+    m_skyPass = std::make_unique<VulkanSkyPass>(device, shaderDir, m_samples,
+                                                kColorFormat, kDepthFormat);
 }
 
 VulkanSceneView::~VulkanSceneView() {
@@ -433,6 +435,11 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
     ScenePush push{};
     push.tint[0] = push.tint[1] = push.tint[2] = push.tint[3] = 1.0f;
     VkDeviceSize offset = 0;
+
+    // Procedural sky background (fills all pixels before geometry draws over it).
+    if (scene.sky.enabled) {
+        m_skyPass->Record(m_cmd, scene.sky, scene.view, viewProj);
+    }
 
     // Depth-tested lines (grid).
     if (scene.lineVertexCount) {

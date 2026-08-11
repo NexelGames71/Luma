@@ -32,4 +32,17 @@ struct MeshRendererComponent {
     Math::Vec3 color{0.80f, 0.80f, 0.85f};
 };
 
+// Drives the world's sky/atmosphere. Attached by default to an Environment game
+// object. The renderer evaluates an analytic Preetham daylight sky from these
+// values (see Luma::SkyParams / the Vulkan sky pass).
+struct EnvironmentComponent {
+    Math::Vec3 sunDirection{0.35f, 0.65f, 0.55f};  // world dir TO the sun
+    Math::Vec3 groundColor{0.11f, 0.12f, 0.14f};   // below the horizon
+    f32 turbidity = 2.6f;                          // atmospheric haze (1..10)
+    f32 sunIntensity = 1.0f;                       // sun-disk brightness
+    f32 skyIntensity = 1.0f;                       // overall sky exposure
+    f32 sunSizeDegrees = 1.5f;                     // sun angular diameter
+    bool skyEnabled = true;
+};
+
 }  // namespace Luma

@@ -15,17 +15,27 @@
 namespace Luma {
 
 struct GridConfig {
-    i32 halfExtent = 50;   // lines span [-halfExtent, +halfExtent] cells
-    f32 spacing = 1.0f;    // world units per cell
-    i32 majorEvery = 10;   // every Nth line is a "major" line
-    i32 segments = 40;     // subdivisions per line (for a smooth radial fade)
-    f32 fadeStart = 14.0f; // world distance where fading begins
-    f32 fadeEnd = 46.0f;   // world distance where lines reach the fade color
-    Math::Vec3 minorColor{0.30f, 0.32f, 0.37f};
-    Math::Vec3 majorColor{0.44f, 0.47f, 0.53f};
-    Math::Vec3 axisX{0.82f, 0.30f, 0.33f};  // line along X (z = 0)
-    Math::Vec3 axisZ{0.33f, 0.50f, 0.85f};  // line along Z (x = 0)
-    Math::Vec3 fadeColor{0.07f, 0.08f, 0.10f};  // viewport background
+    i32 halfExtent = 90;  // lines span [-halfExtent, +halfExtent] cells
+    f32 spacing = 1.0f;   // world units per cell
+    i32 majorEvery = 10;  // every Nth line is a "major" line
+    i32 segments = 48;    // subdivisions per line (for a smooth radial fade)
+
+    // Each tier fades from its color to `fadeColor` between a start and end
+    // radial distance. Minor lines fade out fast and near, so the distance
+    // reads as a clean major grid (Unreal/Unity style) instead of dense fabric;
+    // axes persist furthest.
+    f32 minorFadeStart = 6.0f;
+    f32 minorFadeEnd = 26.0f;
+    f32 majorFadeStart = 24.0f;
+    f32 majorFadeEnd = 82.0f;
+    f32 axisFadeStart = 34.0f;
+    f32 axisFadeEnd = 92.0f;
+
+    Math::Vec3 minorColor{0.205f, 0.220f, 0.255f};
+    Math::Vec3 majorColor{0.44f, 0.48f, 0.56f};
+    Math::Vec3 axisX{0.88f, 0.26f, 0.30f};  // line along X (z = 0)
+    Math::Vec3 axisZ{0.26f, 0.54f, 0.94f};  // line along Z (x = 0)
+    Math::Vec3 fadeColor{0.10f, 0.11f, 0.13f};  // blends into the ground haze
 };
 
 class Grid {
@@ -40,6 +50,7 @@ public:
 private:
     std::vector<LineVertex> m_lines;
     Math::Vec3 m_center{1e9f, 0.0f, 1e9f};  // last snapped center (forces build)
+    f32 m_spacing = -1.0f;                  // last cell size (forces build)
     bool m_built = false;
 };
 

@@ -167,12 +167,14 @@ int main(int argc, char** argv) {
     TextureHandle iconPlay = loadIcon("Icons/play.png");
     TextureHandle iconPause = loadIcon("Icons/pause.png");
     TextureHandle iconStop = loadIcon("Icons/stop.png");
+    TextureHandle iconLogo = loadIcon("luma_icon.png");
 
     std::unique_ptr<EditorScreen> editor;
     SplashScreen splash;
     if (editorMode) {
         editor = std::make_unique<EditorScreen>(projectFile);
         editor->SetToolbarIcons(iconPlay, iconPause, iconStop);
+        editor->SetLogoIcon(iconLogo);
     }
 
     // Splash phase (editor mode only).

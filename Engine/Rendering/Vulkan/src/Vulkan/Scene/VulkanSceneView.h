@@ -1,6 +1,9 @@
 #pragma once
 
+#include <memory>
+
 #include "Luma/RHI/Renderer.h"
+#include "Vulkan/Sky/VulkanSkyPass.h"
 #include "Vulkan/UI/VulkanUIPass.h"
 #include "Vulkan/VulkanCommon.h"
 #include "Vulkan/VulkanMemory.h"
@@ -47,6 +50,8 @@ private:
     VkPipeline m_trianglePipeline = VK_NULL_HANDLE;
     VkPipeline m_linePipeline = VK_NULL_HANDLE;      // depth-tested lines (grid)
     VkPipeline m_overlayPipeline = VK_NULL_HANDLE;   // no-depth lines (gizmo)
+
+    std::unique_ptr<VulkanSkyPass> m_skyPass;  // its own module (Sky/)
 
     GpuBuffer m_vertexBuffer;  // cube mesh
     GpuBuffer m_indexBuffer;

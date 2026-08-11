@@ -72,11 +72,27 @@ struct LineVertex {
     Math::Vec3 color;
 };
 
+// Procedural sky parameters. Fed by the Environment feature (an Environment
+// entity's EnvironmentComponent); the backend renders an analytic Preetham sky
+// as a fullscreen background when `enabled`. The renderer stays feature-agnostic
+// — it consumes these numbers, it does not know about "environments".
+struct SkyParams {
+    Math::Vec3 sunDirection{0.35f, 0.65f, 0.55f};  // world dir TO the sun
+    f32 turbidity = 2.6f;                          // atmospheric haze (1..10)
+    Math::Vec3 groundColor{0.11f, 0.12f, 0.14f};   // color below the horizon
+    f32 sunIntensity = 1.0f;                       // sun-disk brightness
+    f32 skyIntensity = 1.0f;                       // overall sky exposure
+    f32 sunSizeDegrees = 1.5f;                     // sun angular diameter
+    bool enabled = false;
+};
+
 // Camera + everything to render for one viewport frame. The backend builds the
 // projection from the fov and the target size, so callers only supply the view.
 // Line data is produced by separate modules (e.g. Luma::Grid, Luma::Gizmo) and
 // handed in here — the renderer stays feature-agnostic.
 struct SceneView {
+    SkyParams sky;
+
     Math::Mat4 view = Math::Mat4::Identity();
     f32 fovYRadians = 0.9f;
     f32 nearZ = 0.1f;

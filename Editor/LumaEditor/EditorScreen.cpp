@@ -30,6 +30,15 @@ EditorScreen::EditorScreen(const std::filesystem::path& projectFile) {
         m_title = "Luma Editor";
         LUMA_LOG_ERROR("Editor", "could not open project: {}", err);
     }
+
+    // Every world starts with an Environment game object; its Environment
+    // component (attached by default) drives the sky/atmosphere.
+    CreateEnvironment();
+}
+
+void EditorScreen::CreateEnvironment() {
+    m_environment = m_scene.CreateEntity("Environment");
+    m_scene.Registry().emplace<EnvironmentComponent>(m_environment);
 }
 
 void EditorScreen::AddEntity() {
@@ -53,7 +62,23 @@ SceneView EditorScreen::BuildSceneView() {
     m_view = LookAt(eye, m_camTarget, Vec3(0.0f, 1.0f, 0.0f));
     m_gizmoScale = m_camDistance * 0.14f;
 
-    m_grid.Build(m_camTarget);
+    // Infinite-looking grid: scale the cell size (power-of-10 LOD) and the fade
+    // radius with the camera distance, so the grid always fills the view and
+    // stays a clean readable density at any zoom, while line counts stay bounded.
+    GridConfig gc;
+    f32 k = m_camDistance;
+    f32 mag = std::pow(10.0f, std::floor(std::log10(std::max(k, 2.0f) / 6.0f)));
+    gc.spacing = std::clamp(mag, 0.1f, 1000.0f);
+    gc.segments = 28;
+    gc.minorFadeStart = 0.35f * k;
+    gc.minorFadeEnd = 2.2f * k;
+    gc.majorFadeStart = 1.3f * k;
+    gc.majorFadeEnd = 6.5f * k;
+    gc.axisFadeStart = 1.8f * k;
+    gc.axisFadeEnd = 7.5f * k;
+    gc.halfExtent =
+        static_cast<i32>(std::ceil(gc.majorFadeEnd / gc.spacing)) + gc.majorEvery;
+    m_grid.Build(m_camTarget, gc);
 
     // Entity instances.
     m_instances.clear();
@@ -71,6 +96,21 @@ SceneView EditorScreen::BuildSceneView() {
     }
 
     SceneView scene;
+
+    // Sky/atmosphere from the Environment component (first entity that has one).
+    auto envView = m_scene.Registry().view<const EnvironmentComponent>();
+    for (Entity e : envView) {
+        const auto& env = envView.get<const EnvironmentComponent>(e);
+        scene.sky.enabled = env.skyEnabled;
+        scene.sky.sunDirection = env.sunDirection;
+        scene.sky.groundColor = env.groundColor;
+        scene.sky.turbidity = env.turbidity;
+        scene.sky.sunIntensity = env.sunIntensity;
+        scene.sky.skyIntensity = env.skyIntensity;
+        scene.sky.sunSizeDegrees = env.sunSizeDegrees;
+        break;
+    }
+
     scene.view = m_view;
     scene.fovYRadians = m_fovY;
     scene.nearZ = m_nearZ;
@@ -168,10 +208,13 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     ui.GradientRect(menu, Color::RGB(46, 50, 60), Color::RGB(30, 33, 40));
     ui.Panel({0, 31, width, 1}, Color::RGB(12, 13, 16));
 
-    // Brand: gem mark + wordmark.
-    ui.LogoMark({18, 16}, 8.0f);
-    ui.Heading({30, 0, 60, 32}, "Luma", Color::RGB(236, 240, 248));
-    f32 mx = 30.0f + ui.uiFont().Measure("Luma").x + 16.0f;
+    // Brand: the Luma app icon (same footprint as Unreal's corner mark).
+    if (m_iconLogo) {
+        ui.Image(m_iconLogo, {8, 4, 24, 24});
+    } else {
+        ui.LogoMark({20, 16}, 9.0f);
+    }
+    f32 mx = 42.0f;
 
     const char* items[] = {"File", "Edit", "Assets", "Window", "Help"};
     for (const char* item : items) {
@@ -253,31 +296,103 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
     if (!m_scene.IsValid(m_selected)) {
         ui.LabelIn({body.x, body.y + 8, body.w, 22}, "  No selection",
                    t.textDim);
+        m_showAddMenu = false;
         return;
     }
     auto& reg = m_scene.Registry();
     f32 x = body.x + 12.0f;
     f32 y = body.y + 12.0f;
     f32 w = body.w - 24.0f;
-    ui.Heading({x, y, w, 22}, reg.get<NameComponent>(m_selected).name, t.text);
-    y += 30.0f;
 
-    // Transform section header with an accent tab on the left.
-    ui.GradientRect({body.x, y, body.w, 26}, Color::RGB(44, 48, 57),
-                    Color::RGB(34, 37, 44));
-    ui.Panel({body.x, y, 3, 26}, t.accent);
-    ui.Heading({x, y, w, 26}, "Transform", t.text);
-    y += 32.0f;
+    // Header row: entity name + Add Component.
+    ui.Heading({x, y, w - 118.0f, 24}, reg.get<NameComponent>(m_selected).name,
+               t.text);
+    if (ui.Button(Slate::Context::ID("insp.addcomp"),
+                  {body.Right() - 118.0f, y, 106, 24}, "+ Component")) {
+        m_showAddMenu = !m_showAddMenu;
+    }
+    y += 34.0f;
 
-    auto& tf = reg.get<TransformComponent>(m_selected);
-    auto field = [&](const char* label, u64 id, f32* v) {
-        ui.LabelIn({x, y, 66, 24}, label, t.textDim);
-        ui.Vector3Field(id, {x + 66, y, w - 66, 22}, v);
+    auto sectionHeader = [&](const char* label) {
+        ui.GradientRect({body.x, y, body.w, 26}, Color::RGB(44, 48, 57),
+                        Color::RGB(34, 37, 44));
+        ui.Panel({body.x, y, 3, 26}, t.accent);
+        ui.Heading({x, y, w, 26}, label, t.text);
+        y += 32.0f;
+    };
+    auto vec3Row = [&](const char* label, u64 id, f32* v) {
+        ui.LabelIn({x, y, 82, 22}, label, t.textDim);
+        ui.Vector3Field(id, {x + 82, y, w - 82, 22}, v);
         y += 28.0f;
     };
-    field("Position", Slate::Context::ID("insp.pos"), &tf.position.x);
-    field("Rotation", Slate::Context::ID("insp.rot"), &tf.rotationEuler.x);
-    field("Scale", Slate::Context::ID("insp.scl"), &tf.scale.x);
+    auto floatRow = [&](const char* label, u64 id, f32& v) {
+        ui.LabelIn({x, y, 118, 22}, label, t.textDim);
+        ui.DragFloat(id, {x + 118, y, w - 118, 22}, v, 0.02f);
+        y += 28.0f;
+    };
+
+    if (reg.all_of<TransformComponent>(m_selected)) {
+        sectionHeader("Transform");
+        auto& tf = reg.get<TransformComponent>(m_selected);
+        vec3Row("Position", Slate::Context::ID("insp.pos"), &tf.position.x);
+        vec3Row("Rotation", Slate::Context::ID("insp.rot"), &tf.rotationEuler.x);
+        vec3Row("Scale", Slate::Context::ID("insp.scl"), &tf.scale.x);
+        y += 8.0f;
+    }
+    if (reg.all_of<MeshRendererComponent>(m_selected)) {
+        sectionHeader("Mesh Renderer");
+        auto& mr = reg.get<MeshRendererComponent>(m_selected);
+        vec3Row("Color", Slate::Context::ID("insp.col"), &mr.color.x);
+        y += 8.0f;
+    }
+    if (reg.all_of<EnvironmentComponent>(m_selected)) {
+        sectionHeader("Environment");
+        auto& env = reg.get<EnvironmentComponent>(m_selected);
+        ui.Checkbox(Slate::Context::ID("insp.skyon"), {x, y, 18, 18},
+                    "Sky Enabled", env.skyEnabled);
+        y += 26.0f;
+        vec3Row("Sun Dir", Slate::Context::ID("insp.sundir"),
+                &env.sunDirection.x);
+        vec3Row("Ground", Slate::Context::ID("insp.ground"),
+                &env.groundColor.x);
+        floatRow("Turbidity", Slate::Context::ID("insp.turb"), env.turbidity);
+        floatRow("Sun Intensity", Slate::Context::ID("insp.suni"),
+                 env.sunIntensity);
+        floatRow("Sky Intensity", Slate::Context::ID("insp.skyi"),
+                 env.skyIntensity);
+        floatRow("Sun Size", Slate::Context::ID("insp.suns"),
+                 env.sunSizeDegrees);
+        y += 8.0f;
+    }
+
+    // Add Component popup: lists component types not yet on the entity.
+    if (m_showAddMenu) {
+        bool canMesh = !reg.all_of<MeshRendererComponent>(m_selected);
+        bool canEnv = !reg.all_of<EnvironmentComponent>(m_selected);
+        int count = (canMesh ? 1 : 0) + (canEnv ? 1 : 0);
+        f32 mw = 190.0f;
+        f32 mx = body.Right() - mw - 12.0f;
+        f32 my = body.y + 44.0f;
+        f32 rows = static_cast<f32>(count > 0 ? count : 1);
+        ui.PanelRoundedBordered({mx - 6, my - 6, mw + 12, rows * 28.0f + 12.0f},
+                                Color::RGB(26, 28, 34), t.accent, 8.0f, 1.0f);
+        if (canMesh &&
+            ui.Button(Slate::Context::ID("add.mesh"), {mx, my, mw, 24},
+                      "Mesh Renderer")) {
+            reg.emplace<MeshRendererComponent>(m_selected);
+            m_showAddMenu = false;
+        }
+        if (canMesh) my += 28.0f;
+        if (canEnv &&
+            ui.Button(Slate::Context::ID("add.env"), {mx, my, mw, 24},
+                      "Environment")) {
+            reg.emplace<EnvironmentComponent>(m_selected);
+            m_showAddMenu = false;
+        }
+        if (count == 0) {
+            ui.LabelIn({mx, my, mw, 24}, "  All components added", t.textDim);
+        }
+    }
 }
 
 }  // namespace Luma
