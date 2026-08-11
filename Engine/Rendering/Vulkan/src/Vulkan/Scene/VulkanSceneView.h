@@ -21,7 +21,7 @@ public:
     VulkanSceneView& operator=(const VulkanSceneView&) = delete;
 
     // Renders the scene at the given size; returns the UI texture handle to show.
-    TextureHandle Render(u32 width, u32 height, f32 dt);
+    TextureHandle Render(u32 width, u32 height, const SceneView& scene);
 
 private:
     void CreateTargets(u32 width, u32 height);
@@ -55,7 +55,6 @@ private:
     u32 m_height = 0;
 
     TextureHandle m_textureHandle = 0;
-    f32 m_time = 0.0f;
 
     static constexpr VkFormat kColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
     static constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;

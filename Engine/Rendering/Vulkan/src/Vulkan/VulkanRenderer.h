@@ -34,7 +34,8 @@ public:
     void CaptureFrame(const std::string& pngPath) override {
         m_capturePath = pngPath;
     }
-    TextureHandle RenderSceneView(u32 width, u32 height, f32 dt) override;
+    TextureHandle RenderSceneView(u32 width, u32 height,
+                                  const SceneView& scene) override;
     void WaitIdle() override;
 
 private:

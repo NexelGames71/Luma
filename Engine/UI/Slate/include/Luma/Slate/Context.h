@@ -105,10 +105,19 @@ public:
     // rect below the title bar.
     Rect PanelWithTitle(const Rect& rect, std::string_view title);
 
+    // A full-width selectable list row (used by the outliner).
+    bool Selectable(u64 id, const Rect& rect, std::string_view label,
+                    bool selected);
+
     Theme& theme() { return m_theme; }
     Font& font() { return m_font; }
     Font& titleFont() { return m_titleFont; }
     Vec2 mouse() const { return m_mouse; }
+    Vec2 mouseDelta() const { return m_mouseDelta; }
+    f32 scrollDelta() const { return m_scroll; }
+    bool isMouseDown(int button) const {
+        return button >= 0 && button < 3 ? m_mouseDown[button] : false;
+    }
 
     // FNV-1a hash for stable widget ids from string literals.
     static u64 ID(std::string_view s);
@@ -120,6 +129,8 @@ private:
     Theme m_theme = DarkTheme();
 
     Vec2 m_mouse;
+    Vec2 m_prevMouse;
+    Vec2 m_mouseDelta;
     bool m_mouseDown[3] = {};
     bool m_mousePressed[3] = {};
     bool m_mouseReleased[3] = {};

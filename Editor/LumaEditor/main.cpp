@@ -193,8 +193,9 @@ int main(int argc, char** argv) {
         if (editorMode && editor && splashTime >= kSplashDuration) {
             Slate::Rect vp = editor->ViewportRect();
             if (vp.w > 4.0f && vp.h > 4.0f) {
+                SceneView scene = editor->BuildSceneView();
                 TextureHandle sceneTex = renderer->RenderSceneView(
-                    static_cast<u32>(vp.w), static_cast<u32>(vp.h), dt);
+                    static_cast<u32>(vp.w), static_cast<u32>(vp.h), scene);
                 editor->SetViewportTexture(sceneTex);
             }
         }

@@ -21,15 +21,16 @@ const SceneVertex kVertices[] = {
     {4, 0, -4, 0.15f, 0.16f, 0.19f},
     {4, 0, 4, 0.11f, 0.12f, 0.15f},
     {-4, 0, 4, 0.11f, 0.12f, 0.15f},
-    // Cube
-    {-0.5f, -0.5f, -0.5f, 0.90f, 0.25f, 0.25f},
-    {0.5f, -0.5f, -0.5f, 0.30f, 0.85f, 0.35f},
-    {0.5f, 0.5f, -0.5f, 0.30f, 0.55f, 0.95f},
-    {-0.5f, 0.5f, -0.5f, 0.95f, 0.85f, 0.30f},
-    {-0.5f, -0.5f, 0.5f, 0.85f, 0.35f, 0.85f},
-    {0.5f, -0.5f, 0.5f, 0.30f, 0.85f, 0.90f},
-    {0.5f, 0.5f, 0.5f, 0.95f, 0.95f, 0.95f},
-    {-0.5f, 0.5f, 0.5f, 0.95f, 0.55f, 0.25f},
+    // Cube: grayscale so the per-instance tint colors it; brighter at the top
+    // and front for a bit of fake shading.
+    {-0.5f, -0.5f, -0.5f, 0.62f, 0.62f, 0.62f},
+    {0.5f, -0.5f, -0.5f, 0.62f, 0.62f, 0.62f},
+    {0.5f, 0.5f, -0.5f, 0.98f, 0.98f, 0.98f},
+    {-0.5f, 0.5f, -0.5f, 0.98f, 0.98f, 0.98f},
+    {-0.5f, -0.5f, 0.5f, 0.72f, 0.72f, 0.72f},
+    {0.5f, -0.5f, 0.5f, 0.72f, 0.72f, 0.72f},
+    {0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f},
+    {-0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f},
 };
 
 const u32 kIndices[] = {
@@ -46,6 +47,11 @@ const u32 kIndices[] = {
 
 constexpr u32 kGroundIndexCount = 6;
 constexpr u32 kCubeIndexCount = 36;
+
+struct ScenePush {
+    Math::Mat4 mvp;
+    f32 tint[4];
+};
 
 }  // namespace
 
@@ -176,7 +182,7 @@ void VulkanSceneView::CreatePipeline(const std::string& shaderDir) {
     VkPushConstantRange push{};
     push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     push.offset = 0;
-    push.size = sizeof(Math::Mat4);
+    push.size = sizeof(ScenePush);
     VkPipelineLayoutCreateInfo plInfo{};
     plInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     plInfo.pushConstantRangeCount = 1;
@@ -271,9 +277,9 @@ void VulkanSceneView::DestroyTargets() {
     m_depthMem = VK_NULL_HANDLE;
 }
 
-TextureHandle VulkanSceneView::Render(u32 width, u32 height, f32 dt) {
+TextureHandle VulkanSceneView::Render(u32 width, u32 height,
+                                      const SceneView& scene) {
     if (width == 0 || height == 0) return m_textureHandle;
-    m_time += dt;
 
     if (width != m_width || height != m_height) {
         vkDeviceWaitIdle(m_device);
@@ -363,21 +369,29 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height, f32 dt) {
 
     using namespace Math;
     f32 aspect = static_cast<f32>(width) / static_cast<f32>(height);
-    Mat4 proj = Perspective(Radians(50.0f), aspect, 0.1f, 100.0f);
-    Mat4 view = LookAt(Vec3(4.0f, 3.5f, 6.0f), Vec3(0.0f, 0.8f, 0.0f),
-                       Vec3(0.0f, 1.0f, 0.0f));
-    Mat4 viewProj = proj * view;
+    Mat4 proj = Perspective(scene.fovYRadians, aspect, scene.nearZ, scene.farZ);
+    Mat4 viewProj = proj * scene.view;
 
-    vkCmdPushConstants(m_cmd, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(Mat4), &viewProj);
-    vkCmdDrawIndexed(m_cmd, kGroundIndexCount, 1, 0, 0, 0);
-
-    Mat4 model = Translate(Vec3(0.0f, 1.0f, 0.0f)) * RotateY(m_time) *
-                 RotateX(m_time * 0.4f);
-    Mat4 mvp = viewProj * model;
-    vkCmdPushConstants(m_cmd, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(Mat4), &mvp);
-    vkCmdDrawIndexed(m_cmd, kCubeIndexCount, 1, kGroundIndexCount, 0, 0);
+    ScenePush push{};
+    // Ground grid.
+    if (scene.drawGrid) {
+        push.mvp = viewProj;
+        push.tint[0] = push.tint[1] = push.tint[2] = push.tint[3] = 1.0f;
+        vkCmdPushConstants(m_cmd, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+                           0, sizeof(ScenePush), &push);
+        vkCmdDrawIndexed(m_cmd, kGroundIndexCount, 1, 0, 0, 0);
+    }
+    // Entities (cube mesh, tinted per instance).
+    for (u32 i = 0; i < scene.instanceCount; ++i) {
+        push.mvp = viewProj * scene.instances[i].model;
+        push.tint[0] = scene.instances[i].color.x;
+        push.tint[1] = scene.instances[i].color.y;
+        push.tint[2] = scene.instances[i].color.z;
+        push.tint[3] = 1.0f;
+        vkCmdPushConstants(m_cmd, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+                           0, sizeof(ScenePush), &push);
+        vkCmdDrawIndexed(m_cmd, kCubeIndexCount, 1, kGroundIndexCount, 0, 0);
+    }
 
     vkCmdEndRendering(m_cmd);
 

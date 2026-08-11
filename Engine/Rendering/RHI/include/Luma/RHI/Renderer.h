@@ -3,6 +3,7 @@
 #include <string>
 
 #include "Luma/Core/Types.h"
+#include "Luma/Math/Math.h"
 
 // Rendering Hardware Interface (RHI): the abstract surface the engine renders
 // through. Concrete backends (VulkanRenderer today; D3D12/Metal later) implement
@@ -56,6 +57,26 @@ struct UIDrawData {
     f32 displayHeight = 0.0f;
 };
 
+// --- 3D scene view (rendered into an offscreen target for the viewport) -----
+
+// One cube instance: its world transform and RGB color.
+struct SceneInstance {
+    Math::Mat4 model = Math::Mat4::Identity();
+    Math::Vec3 color{0.8f, 0.8f, 0.85f};
+};
+
+// Camera + entities to render. The backend builds the projection from the fov
+// and the target size, so callers only supply the view matrix.
+struct SceneView {
+    Math::Mat4 view = Math::Mat4::Identity();
+    f32 fovYRadians = 0.9f;
+    f32 nearZ = 0.1f;
+    f32 farZ = 500.0f;
+    bool drawGrid = true;
+    const SceneInstance* instances = nullptr;
+    u32 instanceCount = 0;
+};
+
 class Renderer {
 public:
     virtual ~Renderer() = default;
@@ -84,9 +105,10 @@ public:
     // Begin/EndFrame). Only the rendered window contents are written.
     virtual void CaptureFrame(const std::string& pngPath) = 0;
 
-    // Renders the demo 3D scene into an offscreen target of the given size and
-    // returns a UI texture handle to display it. Call before BeginFrame.
-    virtual TextureHandle RenderSceneView(u32 width, u32 height, f32 dt) = 0;
+    // Renders the given scene into an offscreen target and returns a UI texture
+    // handle to display it. Call before BeginFrame.
+    virtual TextureHandle RenderSceneView(u32 width, u32 height,
+                                          const SceneView& scene) = 0;
 
     // Block until the device is idle (use before teardown).
     virtual void WaitIdle() = 0;

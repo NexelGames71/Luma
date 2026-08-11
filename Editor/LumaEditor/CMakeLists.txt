@@ -7,7 +7,7 @@ add_executable(LumaEditor
     EditorScreen.cpp)
 
 target_link_libraries(LumaEditor
-    PRIVATE Luma::Core Luma::Platform Luma::RenderVulkan Luma::Slate
+    PRIVATE Luma::Core Luma::Math Luma::Platform Luma::RenderVulkan Luma::Slate
             Luma::Project Luma::ProjectBrowser)
 
 set_target_properties(LumaEditor PROPERTIES

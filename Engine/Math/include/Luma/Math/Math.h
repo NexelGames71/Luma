@@ -95,6 +95,16 @@ inline Mat4 RotateX(f32 a) {
     return r;
 }
 
+inline Mat4 RotateZ(f32 a) {
+    Mat4 r = Mat4::Identity();
+    f32 c = std::cos(a), s = std::sin(a);
+    r.m[0] = c;
+    r.m[1] = s;
+    r.m[4] = -s;
+    r.m[5] = c;
+    return r;
+}
+
 inline Mat4 LookAt(const Vec3& eye, const Vec3& center, const Vec3& up) {
     Vec3 f = Normalize(center - eye);
     Vec3 s = Normalize(Cross(f, up));

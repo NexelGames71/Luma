@@ -351,7 +351,8 @@ void VulkanRenderer::EndFrame() {
     m_frame = (m_frame + 1) % kFramesInFlight;
 }
 
-TextureHandle VulkanRenderer::RenderSceneView(u32 width, u32 height, f32 dt) {
+TextureHandle VulkanRenderer::RenderSceneView(u32 width, u32 height,
+                                              const SceneView& scene) {
 #if defined(LUMA_SHADER_DIR)
     if (!m_sceneView && m_uiPass) {
         m_sceneView = std::make_unique<VulkanSceneView>(
@@ -360,7 +361,7 @@ TextureHandle VulkanRenderer::RenderSceneView(u32 width, u32 height, f32 dt) {
             LUMA_SHADER_DIR);
     }
 #endif
-    return m_sceneView ? m_sceneView->Render(width, height, dt) : 0;
+    return m_sceneView ? m_sceneView->Render(width, height, scene) : 0;
 }
 
 void VulkanRenderer::WaitIdle() {

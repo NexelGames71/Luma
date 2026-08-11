@@ -96,6 +96,8 @@ void Context::BeginFrame(f32 displayWidth, f32 displayHeight, f32 dt) {
     m_displayH = displayHeight;
     m_time += dt;
     m_hot = 0;
+    m_mouseDelta = {m_mouse.x - m_prevMouse.x, m_mouse.y - m_prevMouse.y};
+    m_prevMouse = m_mouse;
     m_draw.Begin(displayWidth, displayHeight);
 }
 
@@ -367,6 +369,27 @@ bool Context::IconButton(u64 id, const Rect& rect, TextureHandle icon) {
         m_draw.AddImage(icon, ir, Rect{0.0f, 0.0f, 1.0f, 1.0f},
                         Color::RGB(255, 255, 255));
     }
+    return clicked;
+}
+
+bool Context::Selectable(u64 id, const Rect& rect, std::string_view label,
+                         bool selected) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) m_hot = id;
+    bool clicked = false;
+    if (hovered && m_mousePressed[0]) m_active = id;
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) clicked = true;
+        m_active = 0;
+    }
+    if (selected) {
+        m_draw.AddRectFilledRounded(rect, m_theme.cardSelected, m_theme.rounding);
+    } else if (hovered) {
+        m_draw.AddRectFilledRounded(rect, m_theme.buttonHover, m_theme.rounding);
+    }
+    m_draw.AddText(m_font,
+                   {rect.x + 10.0f, rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
+                   label, selected ? m_theme.accentText : m_theme.text);
     return clicked;
 }
 
