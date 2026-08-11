@@ -67,6 +67,15 @@ VulkanSceneView::VulkanSceneView(VkPhysicalDevice physical, VkDevice device,
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     VK_CHECK(vkCreateFence(device, &fenceInfo, nullptr, &m_fence));
 
+    // Pick an MSAA level the device supports for both color and depth (<= 4x).
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(physical, &props);
+    VkSampleCountFlags supported = props.limits.framebufferColorSampleCounts &
+                                   props.limits.framebufferDepthSampleCounts;
+    if (supported & VK_SAMPLE_COUNT_4_BIT) m_samples = VK_SAMPLE_COUNT_4_BIT;
+    else if (supported & VK_SAMPLE_COUNT_2_BIT) m_samples = VK_SAMPLE_COUNT_2_BIT;
+    else m_samples = VK_SAMPLE_COUNT_1_BIT;
+
     CreateGeometry();
     CreatePipelineLayout();
     m_trianglePipeline = CreatePipeline(
@@ -172,7 +181,7 @@ VkPipeline VulkanSceneView::CreatePipeline(const std::string& shaderDir,
 
     VkPipelineMultisampleStateCreateInfo ms{};
     ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    ms.rasterizationSamples = m_samples;
 
     VkPipelineDepthStencilStateCreateInfo ds{};
     ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -240,7 +249,8 @@ void VulkanSceneView::UploadLines(GpuBuffer& buffer, const LineVertex* lines,
 
 void VulkanSceneView::CreateTargets(u32 width, u32 height) {
     auto makeImage = [&](VkFormat format, VkImageUsageFlags usage,
-                         VkImage& image, VkDeviceMemory& mem, VkImageView& view,
+                         VkSampleCountFlagBits samples, VkImage& image,
+                         VkDeviceMemory& mem, VkImageView& view,
                          VkImageAspectFlags aspect) {
         VkImageCreateInfo ii{};
         ii.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -249,7 +259,7 @@ void VulkanSceneView::CreateTargets(u32 width, u32 height) {
         ii.extent = {width, height, 1};
         ii.mipLevels = 1;
         ii.arrayLayers = 1;
-        ii.samples = VK_SAMPLE_COUNT_1_BIT;
+        ii.samples = samples;
         ii.tiling = VK_IMAGE_TILING_OPTIMAL;
         ii.usage = usage;
         ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -274,11 +284,18 @@ void VulkanSceneView::CreateTargets(u32 width, u32 height) {
         VK_CHECK(vkCreateImageView(m_device, &vi, nullptr, &view));
     };
 
+    // 1x resolve target (sampled by the UI).
     makeImage(kColorFormat,
               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-              m_color, m_colorMem, m_colorView, VK_IMAGE_ASPECT_COLOR_BIT);
-    makeImage(kDepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, m_depth,
-              m_depthMem, m_depthView, VK_IMAGE_ASPECT_DEPTH_BIT);
+              VK_SAMPLE_COUNT_1_BIT, m_color, m_colorMem, m_colorView,
+              VK_IMAGE_ASPECT_COLOR_BIT);
+    // Multisampled color + depth (rendered into, then resolved to m_color).
+    makeImage(kColorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, m_samples,
+              m_msaaColor, m_msaaColorMem, m_msaaColorView,
+              VK_IMAGE_ASPECT_COLOR_BIT);
+    makeImage(kDepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+              m_samples, m_depth, m_depthMem, m_depthView,
+              VK_IMAGE_ASPECT_DEPTH_BIT);
     m_width = width;
     m_height = height;
 }
@@ -287,12 +304,18 @@ void VulkanSceneView::DestroyTargets() {
     if (m_colorView) vkDestroyImageView(m_device, m_colorView, nullptr);
     if (m_color) vkDestroyImage(m_device, m_color, nullptr);
     if (m_colorMem) vkFreeMemory(m_device, m_colorMem, nullptr);
+    if (m_msaaColorView) vkDestroyImageView(m_device, m_msaaColorView, nullptr);
+    if (m_msaaColor) vkDestroyImage(m_device, m_msaaColor, nullptr);
+    if (m_msaaColorMem) vkFreeMemory(m_device, m_msaaColorMem, nullptr);
     if (m_depthView) vkDestroyImageView(m_device, m_depthView, nullptr);
     if (m_depth) vkDestroyImage(m_device, m_depth, nullptr);
     if (m_depthMem) vkFreeMemory(m_device, m_depthMem, nullptr);
     m_colorView = VK_NULL_HANDLE;
     m_color = VK_NULL_HANDLE;
     m_colorMem = VK_NULL_HANDLE;
+    m_msaaColorView = VK_NULL_HANDLE;
+    m_msaaColor = VK_NULL_HANDLE;
+    m_msaaColorMem = VK_NULL_HANDLE;
     m_depthView = VK_NULL_HANDLE;
     m_depth = VK_NULL_HANDLE;
     m_depthMem = VK_NULL_HANDLE;
@@ -349,6 +372,13 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
         vkCmdPipelineBarrier(m_cmd, srcS, dstS, 0, 0, nullptr, 0, nullptr, 1, &b);
     };
 
+    // MSAA color (rendered into) and the 1x resolve target both start as color
+    // attachments; depth is multisampled.
+    barrier(m_msaaColor, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
     barrier(m_color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -362,8 +392,11 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
 
     VkRenderingAttachmentInfo color{};
     color.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    color.imageView = m_colorView;
+    color.imageView = m_msaaColorView;
     color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+    color.resolveImageView = m_colorView;
+    color.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     color.clearValue.color = {{0.07f, 0.08f, 0.10f, 1.0f}};

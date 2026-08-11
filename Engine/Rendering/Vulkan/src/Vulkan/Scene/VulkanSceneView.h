@@ -53,11 +53,16 @@ private:
     GpuBuffer m_lineBuffer;     // dynamic, per-frame
     GpuBuffer m_overlayBuffer;  // dynamic, per-frame
 
-    // Offscreen targets.
-    VkImage m_color = VK_NULL_HANDLE;
+    // Offscreen targets. Rendering is multisampled (m_samples) into the MSAA
+    // color + depth images, then resolved into m_color, which the UI samples.
+    VkSampleCountFlagBits m_samples = VK_SAMPLE_COUNT_1_BIT;
+    VkImage m_color = VK_NULL_HANDLE;  // 1x resolve target (sampled by UI)
     VkDeviceMemory m_colorMem = VK_NULL_HANDLE;
     VkImageView m_colorView = VK_NULL_HANDLE;
-    VkImage m_depth = VK_NULL_HANDLE;
+    VkImage m_msaaColor = VK_NULL_HANDLE;
+    VkDeviceMemory m_msaaColorMem = VK_NULL_HANDLE;
+    VkImageView m_msaaColorView = VK_NULL_HANDLE;
+    VkImage m_depth = VK_NULL_HANDLE;  // multisampled depth
     VkDeviceMemory m_depthMem = VK_NULL_HANDLE;
     VkImageView m_depthView = VK_NULL_HANDLE;
     u32 m_width = 0;
