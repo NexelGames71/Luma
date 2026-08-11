@@ -7,9 +7,11 @@
 
 namespace Luma {
 
-// Renders a demo 3D scene (rotating cube on a ground plane) into an offscreen
-// color+depth target, then exposes the color image as a sampleable UI texture
-// (registered with the UI pass) for display in the editor viewport.
+// Generic offscreen scene renderer: draws cube instances (triangles), plus two
+// line channels (depth-tested and overlay) that feature modules (grid, gizmo)
+// fill via SceneView. The color target is exposed as a UI-sampleable texture.
+// This class is feature-agnostic: it renders primitives, not "grids" or
+// "gizmos".
 class VulkanSceneView {
 public:
     VulkanSceneView(VkPhysicalDevice physical, VkDevice device, VkQueue queue,
@@ -20,14 +22,17 @@ public:
     VulkanSceneView(const VulkanSceneView&) = delete;
     VulkanSceneView& operator=(const VulkanSceneView&) = delete;
 
-    // Renders the scene at the given size; returns the UI texture handle to show.
     TextureHandle Render(u32 width, u32 height, const SceneView& scene);
 
 private:
     void CreateTargets(u32 width, u32 height);
     void DestroyTargets();
-    void CreatePipeline(const std::string& shaderDir);
+    void CreatePipelineLayout();
+    VkPipeline CreatePipeline(const std::string& shaderDir,
+                              VkPrimitiveTopology topology, bool depthTest,
+                              bool depthWrite);
     void CreateGeometry();
+    void UploadLines(GpuBuffer& buffer, const LineVertex* lines, u32 count);
 
     VkPhysicalDevice m_physical;
     VkDevice m_device;
@@ -39,10 +44,14 @@ private:
     VkFence m_fence = VK_NULL_HANDLE;
 
     VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-    VkPipeline m_pipeline = VK_NULL_HANDLE;
+    VkPipeline m_trianglePipeline = VK_NULL_HANDLE;
+    VkPipeline m_linePipeline = VK_NULL_HANDLE;      // depth-tested lines (grid)
+    VkPipeline m_overlayPipeline = VK_NULL_HANDLE;   // no-depth lines (gizmo)
 
-    GpuBuffer m_vertexBuffer;
+    GpuBuffer m_vertexBuffer;  // cube mesh
     GpuBuffer m_indexBuffer;
+    GpuBuffer m_lineBuffer;     // dynamic, per-frame
+    GpuBuffer m_overlayBuffer;  // dynamic, per-frame
 
     // Offscreen targets.
     VkImage m_color = VK_NULL_HANDLE;

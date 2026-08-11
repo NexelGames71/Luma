@@ -118,6 +118,12 @@ public:
     bool isMouseDown(int button) const {
         return button >= 0 && button < 3 ? m_mouseDown[button] : false;
     }
+    bool mousePressed(int button) const {
+        return button >= 0 && button < 3 ? m_mousePressed[button] : false;
+    }
+    bool mouseReleased(int button) const {
+        return button >= 0 && button < 3 ? m_mouseReleased[button] : false;
+    }
 
     // FNV-1a hash for stable widget ids from string literals.
     static u64 ID(std::string_view s);

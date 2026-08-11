@@ -65,16 +65,33 @@ struct SceneInstance {
     Math::Vec3 color{0.8f, 0.8f, 0.85f};
 };
 
-// Camera + entities to render. The backend builds the projection from the fov
-// and the target size, so callers only supply the view matrix.
+// A world-space line-segment vertex (two per segment). Feature modules (grid,
+// gizmo) produce these; the backend just renders line lists.
+struct LineVertex {
+    Math::Vec3 position;
+    Math::Vec3 color;
+};
+
+// Camera + everything to render for one viewport frame. The backend builds the
+// projection from the fov and the target size, so callers only supply the view.
+// Line data is produced by separate modules (e.g. Luma::Grid, Luma::Gizmo) and
+// handed in here — the renderer stays feature-agnostic.
 struct SceneView {
     Math::Mat4 view = Math::Mat4::Identity();
     f32 fovYRadians = 0.9f;
     f32 nearZ = 0.1f;
     f32 farZ = 500.0f;
-    bool drawGrid = true;
+
     const SceneInstance* instances = nullptr;
     u32 instanceCount = 0;
+
+    // Depth-tested world lines (e.g. the ground grid).
+    const LineVertex* lines = nullptr;
+    u32 lineVertexCount = 0;
+
+    // Lines drawn on top without depth testing (e.g. transform gizmos).
+    const LineVertex* overlayLines = nullptr;
+    u32 overlayLineVertexCount = 0;
 };
 
 class Renderer {

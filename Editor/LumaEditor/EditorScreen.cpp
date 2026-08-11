@@ -21,59 +21,30 @@ EditorScreen::EditorScreen(const std::filesystem::path& projectFile) {
         m_title = "Luma Editor";
         LUMA_LOG_ERROR("Editor", "could not open project: {}", err);
     }
-}
-
-void EditorScreen::AddEntity() {
-    Entity e;
-    e.name = "Entity " + std::to_string(m_nextEntityNumber++);
-    // Place new entities along X so several are visible without overlap.
-    e.position = Math::Vec3(static_cast<f32>(m_entities.size()) * 2.0f, 1.0f,
-                            0.0f);
-    m_entities.push_back(e);
-    m_selected = static_cast<int>(m_entities.size()) - 1;
-}
-
-Math::Mat4 EditorScreen::EntityMatrix(const Entity& e) const {
-    using namespace Math;
-    return Translate(e.position) * RotateY(Radians(e.rotationDeg.y)) *
-           RotateX(Radians(e.rotationDeg.x)) * RotateZ(Radians(e.rotationDeg.z)) *
-           Scale(e.scale);
+    m_grid.Build();
 }
 
 SceneView EditorScreen::BuildSceneView() {
     using namespace Math;
-    // Camera position from orbit angles.
     Vec3 eye{
         m_camTarget.x + m_camDistance * std::cos(m_camPitch) * std::sin(m_camYaw),
         m_camTarget.y + m_camDistance * std::sin(m_camPitch),
         m_camTarget.z + m_camDistance * std::cos(m_camPitch) * std::cos(m_camYaw)};
 
-    m_instances.clear();
-    m_instances.reserve(m_entities.size());
-    for (int i = 0; i < static_cast<int>(m_entities.size()); ++i) {
-        SceneInstance inst;
-        inst.model = EntityMatrix(m_entities[static_cast<usize>(i)]);
-        Vec3 c = m_entities[static_cast<usize>(i)].color;
-        if (i == m_selected) {
-            // Brighten the selected entity so it reads as highlighted.
-            c = Vec3(std::min(1.0f, c.x + 0.25f), std::min(1.0f, c.y + 0.25f),
-                     std::min(1.0f, c.z + 0.25f));
-        }
-        inst.color = c;
-        m_instances.push_back(inst);
-    }
-
     SceneView scene;
     scene.view = LookAt(eye, m_camTarget, Vec3(0.0f, 1.0f, 0.0f));
-    scene.instances = m_instances.data();
-    scene.instanceCount = static_cast<u32>(m_instances.size());
+    scene.lines = m_grid.Lines().data();
+    scene.lineVertexCount = m_grid.VertexCount();
+    // Entities come from the ECS (EnTT) later; none rendered yet.
+    scene.instances = nullptr;
+    scene.instanceCount = 0;
     return scene;
 }
 
 void EditorScreen::UpdateCamera(Slate::Context& ui, const Rect& viewport) {
     if (!viewport.Contains(ui.mouse())) return;
-
-    if (ui.isMouseDown(0)) {
+    // Right-drag orbits (left is reserved for selection/gizmos later).
+    if (ui.isMouseDown(1)) {
         Vec2 d = ui.mouseDelta();
         m_camYaw -= d.x * 0.01f;
         m_camPitch += d.y * 0.01f;
@@ -126,7 +97,9 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     ui.SplitterV(Slate::Context::ID("dock.right"), rest, m_rightSplit, center,
                  right);
 
-    DrawOutliner(ui, left);
+    // World Outliner (populated by the ECS later).
+    Rect ob = ui.PanelWithTitle(left, "World Outliner");
+    ui.LabelIn({ob.x, ob.y + 8, ob.w, 22}, "  (no entities)", t.textDim);
 
     // Viewport.
     Rect vp = ui.PanelWithTitle(center, "Viewport");
@@ -139,67 +112,14 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     }
     UpdateCamera(ui, vp);
 
-    DrawInspector(ui, right);
+    // Inspector.
+    Rect insp = ui.PanelWithTitle(right, "Inspector");
+    ui.LabelIn({insp.x, insp.y + 8, insp.w, 22}, "  No selection", t.textDim);
 
     // Console.
     Rect con = ui.PanelWithTitle(console, "Console");
     ui.LabelIn({con.x + 12, con.y + 8, con.w - 20, 22}, "Luma Editor ready.",
                t.textDim);
-}
-
-void EditorScreen::DrawOutliner(Slate::Context& ui, const Rect& rect) {
-    Slate::Theme& t = ui.theme();
-    Rect body = ui.PanelWithTitle(rect, "World Outliner");
-
-    // Add button in the title area.
-    if (ui.Button(Slate::Context::ID("outliner.add"),
-                  {rect.Right() - 52, rect.y + 2, 44, 22}, "+ Add")) {
-        AddEntity();
-    }
-
-    if (m_entities.empty()) {
-        ui.LabelIn({body.x, body.y + 8, body.w, 24}, "  (empty scene)",
-                   t.textDim);
-        return;
-    }
-    f32 y = body.y + 6.0f;
-    for (int i = 0; i < static_cast<int>(m_entities.size()); ++i) {
-        Rect row{body.x + 4, y, body.w - 8, 24};
-        if (ui.Selectable(Slate::Context::ID(m_entities[static_cast<usize>(i)]
-                                                 .name.c_str()),
-                          row, m_entities[static_cast<usize>(i)].name,
-                          i == m_selected)) {
-            m_selected = i;
-        }
-        y += 26.0f;
-    }
-}
-
-void EditorScreen::DrawInspector(Slate::Context& ui, const Rect& rect) {
-    Slate::Theme& t = ui.theme();
-    Rect body = ui.PanelWithTitle(rect, "Inspector");
-
-    if (m_selected < 0 || m_selected >= static_cast<int>(m_entities.size())) {
-        ui.LabelIn({body.x, body.y + 8, body.w, 24}, "  No selection",
-                   t.textDim);
-        return;
-    }
-    const Entity& e = m_entities[static_cast<usize>(m_selected)];
-    f32 x = body.x + 12.0f;
-    f32 y = body.y + 10.0f;
-    ui.LabelIn({x, y, body.w - 24, 24}, e.name, t.text);
-    y += 30.0f;
-
-    auto vecRow = [&](const char* label, const Math::Vec3& v) {
-        ui.LabelIn({x, y, 90, 22}, label, t.textDim);
-        char buf[96];
-        std::snprintf(buf, sizeof(buf), "%.2f  %.2f  %.2f", v.x, v.y, v.z);
-        ui.LabelIn({x + 90, y, body.w - 90 - 24, 22}, buf, t.text);
-        y += 26.0f;
-    };
-    vecRow("Position", e.position);
-    vecRow("Rotation", e.rotationDeg);
-    vecRow("Scale", e.scale);
 }
 
 }  // namespace Luma

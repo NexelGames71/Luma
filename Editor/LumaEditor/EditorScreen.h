@@ -3,8 +3,8 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <vector>
 
+#include "Luma/Grid/Grid.h"
 #include "Luma/Math/Math.h"
 #include "Luma/Project/Project.h"
 #include "Luma/RHI/Renderer.h"
@@ -12,26 +12,19 @@
 
 namespace Luma {
 
-// A scene entity: a named transform with a display color. Created in-editor via
-// the World Outliner (the scene starts empty).
-struct Entity {
-    std::string name;
-    Math::Vec3 position{0.0f, 1.0f, 0.0f};
-    Math::Vec3 rotationDeg{0.0f, 0.0f, 0.0f};
-    Math::Vec3 scale{1.0f, 1.0f, 1.0f};
-    Math::Vec3 color{0.80f, 0.80f, 0.85f};
-};
-
 // The editor shell: menu bar, toolbar, and a dockable layout (World Outliner,
-// Viewport, Inspector, Console) with draggable splitters. Owns the scene and an
-// orbit camera; the viewport shows the scene rendered by the RHI.
+// Viewport, Inspector, Console). Owns the viewport camera and the ground grid.
+//
+// The scene/entity model is intentionally NOT built here - it will be provided
+// by the ECS (EnTT) when that lands; the outliner/inspector are wired to real
+// entities then. For now the viewport shows the grid with orbit navigation.
 class EditorScreen {
 public:
     explicit EditorScreen(const std::filesystem::path& projectFile);
 
     bool HasProject() const { return m_project.has_value(); }
 
-    // Builds the scene (camera + entity instances) for the renderer.
+    // Builds the scene view (camera + ground grid) for the renderer.
     SceneView BuildSceneView();
 
     void Draw(Slate::Context& ui, f32 width, f32 height);
@@ -47,26 +40,18 @@ public:
     }
 
 private:
-    void DrawOutliner(Slate::Context& ui, const Slate::Rect& rect);
-    void DrawInspector(Slate::Context& ui, const Slate::Rect& rect);
     void UpdateCamera(Slate::Context& ui, const Slate::Rect& viewport);
-    void AddEntity();
-    Math::Mat4 EntityMatrix(const Entity& e) const;
 
     std::optional<Project> m_project;
     std::string m_title;
 
-    // Scene (starts empty).
-    std::vector<Entity> m_entities;
-    int m_selected = -1;
-    int m_nextEntityNumber = 1;
-    std::vector<SceneInstance> m_instances;  // rebuilt each BuildSceneView
+    Grid m_grid;  // ground grid line geometry (Luma::Grid module)
 
     // Orbit camera.
     f32 m_camYaw = 0.9f;
     f32 m_camPitch = 0.5f;
-    f32 m_camDistance = 10.0f;
-    Math::Vec3 m_camTarget{0.0f, 1.0f, 0.0f};
+    f32 m_camDistance = 12.0f;
+    Math::Vec3 m_camTarget{0.0f, 0.0f, 0.0f};
 
     // Dock split ratios (draggable; persist).
     f32 m_consoleSplit = 0.74f;
