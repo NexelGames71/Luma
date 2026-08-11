@@ -474,14 +474,12 @@ bool Context::SplitterV(u64 id, const Rect& region, f32& ratio, Rect& left,
         }
     }
 
-    left = {region.x, region.y, splitX - half - region.x, region.h};
-    right = {splitX + half, region.y, region.Right() - (splitX + half),
-             region.h};
-    // Seamless normally; show the accent line only while hovered/dragging.
-    if (dragging || hovered) {
-        m_draw.AddRectFilled({splitX - half, region.y, thickness, region.h},
-                             m_theme.accent);
-    }
+    // Panels butt together (shared edge); a 1px line marks the boundary.
+    left = {region.x, region.y, splitX - region.x, region.h};
+    right = {splitX, region.y, region.Right() - splitX, region.h};
+    m_draw.AddRectFilled({splitX - half, region.y, thickness, region.h},
+                         (dragging || hovered) ? m_theme.accent
+                                               : m_theme.panelBorder);
     return dragging;
 }
 
@@ -505,28 +503,26 @@ bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
         }
     }
 
-    top = {region.x, region.y, region.w, splitY - half - region.y};
-    bottom = {region.x, splitY + half, region.w,
-              region.Bottom() - (splitY + half)};
-    if (dragging || hovered) {
-        m_draw.AddRectFilled({region.x, splitY - half, region.w, thickness},
-                             m_theme.accent);
-    }
+    top = {region.x, region.y, region.w, splitY - region.y};
+    bottom = {region.x, splitY, region.w, region.Bottom() - splitY};
+    m_draw.AddRectFilled({region.x, splitY - half, region.w, thickness},
+                         (dragging || hovered) ? m_theme.accent
+                                               : m_theme.panelBorder);
     return dragging;
 }
 
 Rect Context::PanelWithTitle(const Rect& rect, std::string_view title) {
-    f32 r = m_theme.rounding;
-    m_draw.AddRectFilledRounded(rect, m_theme.panelBorder, r);
-    m_draw.AddRectFilledRounded(rect.Inset(1.0f, 1.0f), m_theme.panelBg,
-                                r - 1.0f);
-    m_draw.AddText(m_font,
-                   {rect.x + 12.0f, rect.y + (28.0f - m_font.LineHeight()) * 0.5f},
-                   title, m_theme.text);
-    // Divider under the title.
-    m_draw.AddRectFilled({rect.x + 8.0f, rect.y + 28.0f, rect.w - 16.0f, 1.0f},
+    // Flush docked panel (Unity-style): square, full-bleed, header strip + a
+    // 1px divider. Adjacent panels butt together with only the splitter seam.
+    const f32 headerH = 28.0f;
+    m_draw.AddRectFilled(rect, m_theme.panelBg);
+    m_draw.AddRectFilled({rect.x, rect.y, rect.w, headerH}, m_theme.header);
+    m_draw.AddText(
+        m_font, {rect.x + 12.0f, rect.y + (headerH - m_font.LineHeight()) * 0.5f},
+        title, m_theme.text);
+    m_draw.AddRectFilled({rect.x, rect.y + headerH, rect.w, 1.0f},
                          m_theme.panelBorder);
-    return Rect{rect.x, rect.y + 29.0f, rect.w, rect.h - 29.0f};
+    return Rect{rect.x, rect.y + headerH + 1.0f, rect.w, rect.h - headerH - 1.0f};
 }
 
 }  // namespace Luma::Slate
