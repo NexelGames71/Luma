@@ -8,7 +8,8 @@ add_executable(LumaEditor
 
 target_link_libraries(LumaEditor
     PRIVATE Luma::Core Luma::Math Luma::Platform Luma::RenderVulkan Luma::Slate
-            Luma::Project Luma::ProjectBrowser Luma::Grid)
+            Luma::Project Luma::ProjectBrowser Luma::Grid Luma::Scene
+            Luma::Gizmo)
 
 set_target_properties(LumaEditor PROPERTIES
     OUTPUT_NAME "LumaEditor"

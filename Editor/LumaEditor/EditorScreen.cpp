@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 #include "Luma/Core/Log.h"
 
@@ -10,6 +11,14 @@ using Slate::Align;
 using Slate::Color;
 using Slate::Rect;
 using Slate::Vec2;
+
+namespace {
+// Default colors cycled for newly created entities (a sensible default, not
+// scene content - entities are created by the user).
+const Math::Vec3 kEntityPalette[] = {
+    {0.86f, 0.36f, 0.36f}, {0.40f, 0.72f, 0.92f}, {0.52f, 0.85f, 0.50f},
+    {0.92f, 0.78f, 0.36f}, {0.74f, 0.52f, 0.92f}, {0.40f, 0.86f, 0.80f}};
+}  // namespace
 
 EditorScreen::EditorScreen(const std::filesystem::path& projectFile) {
     std::string err;
@@ -23,29 +32,93 @@ EditorScreen::EditorScreen(const std::filesystem::path& projectFile) {
     }
 }
 
+void EditorScreen::AddEntity() {
+    int index = m_nextNumber++;
+    Entity e = m_scene.CreateEntity("Cube " + std::to_string(index));
+    auto& mesh = m_scene.Registry().emplace<MeshRendererComponent>(e);
+    mesh.color = kEntityPalette[(index - 1) %
+                                (sizeof(kEntityPalette) / sizeof(Math::Vec3))];
+    // Space new entities out along X so they don't overlap.
+    auto& tf = m_scene.Registry().get<TransformComponent>(e);
+    tf.position = Math::Vec3(static_cast<f32>(index - 1) * 2.0f, 1.0f, 0.0f);
+    m_selected = e;
+}
+
 SceneView EditorScreen::BuildSceneView() {
     using namespace Math;
     Vec3 eye{
         m_camTarget.x + m_camDistance * std::cos(m_camPitch) * std::sin(m_camYaw),
         m_camTarget.y + m_camDistance * std::sin(m_camPitch),
         m_camTarget.z + m_camDistance * std::cos(m_camPitch) * std::cos(m_camYaw)};
+    m_view = LookAt(eye, m_camTarget, Vec3(0.0f, 1.0f, 0.0f));
+    m_gizmoScale = m_camDistance * 0.14f;
 
-    // Infinite grid: recentre on the camera focus (fades with distance).
     m_grid.Build(m_camTarget);
 
+    // Entity instances.
+    m_instances.clear();
+    auto view = m_scene.Registry().view<TransformComponent, MeshRendererComponent>();
+    for (Entity e : view) {
+        SceneInstance inst;
+        inst.model = view.get<TransformComponent>(e).Matrix();
+        Vec3 c = view.get<MeshRendererComponent>(e).color;
+        if (e == m_selected) {
+            c = Vec3(std::min(1.0f, c.x + 0.25f), std::min(1.0f, c.y + 0.25f),
+                     std::min(1.0f, c.z + 0.25f));
+        }
+        inst.color = c;
+        m_instances.push_back(inst);
+    }
+
     SceneView scene;
-    scene.view = LookAt(eye, m_camTarget, Vec3(0.0f, 1.0f, 0.0f));
+    scene.view = m_view;
+    scene.fovYRadians = m_fovY;
+    scene.nearZ = m_nearZ;
+    scene.farZ = m_farZ;
     scene.lines = m_grid.Lines().data();
     scene.lineVertexCount = m_grid.VertexCount();
-    // Entities come from the ECS (EnTT) later; none rendered yet.
-    scene.instances = nullptr;
-    scene.instanceCount = 0;
+    scene.instances = m_instances.data();
+    scene.instanceCount = static_cast<u32>(m_instances.size());
+
+    // Gizmo overlay for the selected entity.
+    if (m_scene.IsValid(m_selected) &&
+        m_scene.Registry().all_of<TransformComponent>(m_selected)) {
+        const auto& tf = m_scene.Registry().get<TransformComponent>(m_selected);
+        const auto& lines = m_gizmo.BuildLines(tf.position, m_gizmoScale);
+        scene.overlayLines = lines.data();
+        scene.overlayLineVertexCount = static_cast<u32>(lines.size());
+    }
     return scene;
 }
 
-void EditorScreen::UpdateCamera(Slate::Context& ui, const Rect& viewport) {
-    if (!viewport.Contains(ui.mouse())) return;
-    // Right-drag orbits (left is reserved for selection/gizmos later).
+void EditorScreen::UpdateCameraAndGizmo(Slate::Context& ui, const Rect& vp) {
+    // Gizmo drag (left mouse) takes priority over camera when a selection exists.
+    bool gizmoActive = false;
+    if (m_scene.IsValid(m_selected) &&
+        m_scene.Registry().all_of<TransformComponent>(m_selected)) {
+        auto& tf = m_scene.Registry().get<TransformComponent>(m_selected);
+        GizmoInput in;
+        in.view = m_view;
+        in.proj = Math::Perspective(m_fovY, vp.w / vp.h, m_nearZ, m_farZ);
+        in.viewportX = vp.x;
+        in.viewportY = vp.y;
+        in.viewportW = vp.w;
+        in.viewportH = vp.h;
+        in.mouseX = ui.mouse().x;
+        in.mouseY = ui.mouse().y;
+        in.scale = m_gizmoScale;
+        in.leftDown = vp.Contains(ui.mouse()) || m_gizmo.Dragging();
+        in.leftDown = in.leftDown && ui.isMouseDown(0);
+        in.leftPressed = vp.Contains(ui.mouse()) && ui.mousePressed(0);
+        Math::Vec3 newPos;
+        if (m_gizmo.Update(tf.position, in, newPos)) {
+            tf.position = newPos;
+        }
+        gizmoActive = m_gizmo.Dragging();
+    }
+
+    if (gizmoActive || !vp.Contains(ui.mouse())) return;
+    // Right-drag orbits; scroll zooms.
     if (ui.isMouseDown(1)) {
         Vec2 d = ui.mouseDelta();
         m_camYaw -= d.x * 0.01f;
@@ -77,7 +150,7 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
                m_project ? m_project->Name() : "(no project)", t.textDim,
                Align::Right);
 
-    // Toolbar (play controls).
+    // Toolbar.
     Rect toolbar{0, 32, width, 36};
     ui.Panel(toolbar, Color::RGB(28, 31, 37));
     ui.IconButton(Slate::Context::ID("play"), {width / 2 - 46, 35, 30, 28},
@@ -99,9 +172,7 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     ui.SplitterV(Slate::Context::ID("dock.right"), rest, m_rightSplit, center,
                  right);
 
-    // World Outliner (populated by the ECS later).
-    Rect ob = ui.PanelWithTitle(left, "World Outliner");
-    ui.LabelIn({ob.x, ob.y + 8, ob.w, 22}, "  (no entities)", t.textDim);
+    DrawOutliner(ui, left);
 
     // Viewport.
     Rect vp = ui.PanelWithTitle(center, "Viewport");
@@ -112,16 +183,69 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
         ui.Panel(vp, Color::RGB(18, 20, 24));
         ui.LabelIn(vp, "3D Viewport", t.textDim, Align::Center);
     }
-    UpdateCamera(ui, vp);
+    UpdateCameraAndGizmo(ui, vp);
 
-    // Inspector.
-    Rect insp = ui.PanelWithTitle(right, "Inspector");
-    ui.LabelIn({insp.x, insp.y + 8, insp.w, 22}, "  No selection", t.textDim);
+    DrawInspector(ui, right);
 
     // Console.
     Rect con = ui.PanelWithTitle(console, "Console");
     ui.LabelIn({con.x + 12, con.y + 8, con.w - 20, 22}, "Luma Editor ready.",
                t.textDim);
+}
+
+void EditorScreen::DrawOutliner(Slate::Context& ui, const Rect& rect) {
+    Slate::Theme& t = ui.theme();
+    Rect body = ui.PanelWithTitle(rect, "World Outliner");
+    if (ui.Button(Slate::Context::ID("outliner.add"),
+                  {rect.Right() - 52, rect.y + 2, 44, 22}, "+ Add")) {
+        AddEntity();
+    }
+
+    auto view = m_scene.Registry().view<const NameComponent>();
+    if (view.begin() == view.end()) {
+        ui.LabelIn({body.x, body.y + 8, body.w, 22}, "  (no entities)",
+                   t.textDim);
+        return;
+    }
+    f32 y = body.y + 6.0f;
+    for (Entity e : view) {
+        const std::string& name = view.get<const NameComponent>(e).name;
+        Rect row{body.x + 4, y, body.w - 8, 24};
+        if (ui.Selectable(Slate::Context::ID(name.c_str()), row, name,
+                          e == m_selected)) {
+            m_selected = e;
+        }
+        y += 26.0f;
+    }
+}
+
+void EditorScreen::DrawInspector(Slate::Context& ui, const Rect& rect) {
+    Slate::Theme& t = ui.theme();
+    Rect body = ui.PanelWithTitle(rect, "Inspector");
+
+    if (!m_scene.IsValid(m_selected)) {
+        ui.LabelIn({body.x, body.y + 8, body.w, 22}, "  No selection",
+                   t.textDim);
+        return;
+    }
+    auto& reg = m_scene.Registry();
+    f32 x = body.x + 12.0f;
+    f32 y = body.y + 10.0f;
+    ui.LabelIn({x, y, body.w - 24, 24}, reg.get<NameComponent>(m_selected).name,
+               t.text);
+    y += 30.0f;
+
+    const auto& tf = reg.get<TransformComponent>(m_selected);
+    auto row = [&](const char* label, const Math::Vec3& v) {
+        ui.LabelIn({x, y, 80, 22}, label, t.textDim);
+        char buf[96];
+        std::snprintf(buf, sizeof(buf), "%.2f   %.2f   %.2f", v.x, v.y, v.z);
+        ui.LabelIn({x + 80, y, body.w - 80 - 20, 22}, buf, t.text);
+        y += 26.0f;
+    };
+    row("Position", tf.position);
+    row("Rotation", tf.rotationEuler);
+    row("Scale", tf.scale);
 }
 
 }  // namespace Luma

@@ -3,28 +3,29 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "Luma/Gizmo/TranslateGizmo.h"
 #include "Luma/Grid/Grid.h"
 #include "Luma/Math/Math.h"
 #include "Luma/Project/Project.h"
 #include "Luma/RHI/Renderer.h"
+#include "Luma/Scene/Scene.h"
 #include "Luma/Slate/Context.h"
 
 namespace Luma {
 
 // The editor shell: menu bar, toolbar, and a dockable layout (World Outliner,
-// Viewport, Inspector, Console). Owns the viewport camera and the ground grid.
-//
-// The scene/entity model is intentionally NOT built here - it will be provided
-// by the ECS (EnTT) when that lands; the outliner/inspector are wired to real
-// entities then. For now the viewport shows the grid with orbit navigation.
+// Viewport, Inspector, Console). Drives an ECS Scene (EnTT): the outliner lists
+// entities, the viewport renders them and hosts a translate gizmo, the inspector
+// shows the selection.
 class EditorScreen {
 public:
     explicit EditorScreen(const std::filesystem::path& projectFile);
 
     bool HasProject() const { return m_project.has_value(); }
 
-    // Builds the scene view (camera + ground grid) for the renderer.
+    // Builds the scene view (camera + grid + entity instances + gizmo overlay).
     SceneView BuildSceneView();
 
     void Draw(Slate::Context& ui, f32 width, f32 height);
@@ -40,18 +41,34 @@ public:
     }
 
 private:
-    void UpdateCamera(Slate::Context& ui, const Slate::Rect& viewport);
+    void AddEntity();
+    void UpdateCameraAndGizmo(Slate::Context& ui, const Slate::Rect& viewport);
+    void DrawOutliner(Slate::Context& ui, const Slate::Rect& rect);
+    void DrawInspector(Slate::Context& ui, const Slate::Rect& rect);
 
     std::optional<Project> m_project;
     std::string m_title;
 
-    Grid m_grid;  // ground grid line geometry (Luma::Grid module)
+    Scene m_scene;
+    Entity m_selected = kNullEntity;
+    int m_nextNumber = 1;
+
+    Grid m_grid;
+    TranslateGizmo m_gizmo;
+    std::vector<SceneInstance> m_instances;  // rebuilt each frame
 
     // Orbit camera.
     f32 m_camYaw = 0.9f;
     f32 m_camPitch = 0.5f;
     f32 m_camDistance = 12.0f;
     Math::Vec3 m_camTarget{0.0f, 0.0f, 0.0f};
+
+    // Cached each BuildSceneView for the gizmo's screen projection in Draw.
+    Math::Mat4 m_view = Math::Mat4::Identity();
+    f32 m_fovY = 0.9f;
+    f32 m_nearZ = 0.1f;
+    f32 m_farZ = 500.0f;
+    f32 m_gizmoScale = 1.0f;
 
     // Dock split ratios (draggable; persist).
     f32 m_consoleSplit = 0.74f;
