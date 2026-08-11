@@ -12,6 +12,9 @@ target_compile_features(luma_flags INTERFACE cxx_std_20)
 if(MSVC)
     target_compile_options(luma_flags INTERFACE
         /W4 /permissive- /EHsc /utf-8 /Zc:preprocessor
+        # Silence warnings from third-party (SYSTEM) headers so /WX only polices
+        # our own code.
+        /external:W0
         $<$<CONFIG:Development>:/WX>)
     target_compile_definitions(luma_flags INTERFACE
         _CRT_SECURE_NO_WARNINGS
