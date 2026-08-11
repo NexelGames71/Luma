@@ -98,9 +98,9 @@ public:
     // Splits `region` by `ratio` (0..1) with a draggable divider. Outputs the
     // two sub-regions; updates `ratio` while dragging. Returns true if dragging.
     bool SplitterV(u64 id, const Rect& region, f32& ratio, Rect& left,
-                   Rect& right, f32 thickness = 6.0f);
+                   Rect& right, f32 thickness = 2.0f);
     bool SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
-                   Rect& bottom, f32 thickness = 6.0f);
+                   Rect& bottom, f32 thickness = 2.0f);
     // Draws a docked panel (background, title bar, border); returns the content
     // rect below the title bar.
     Rect PanelWithTitle(const Rect& rect, std::string_view title);

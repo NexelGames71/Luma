@@ -457,8 +457,10 @@ bool Context::CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
 bool Context::SplitterV(u64 id, const Rect& region, f32& ratio, Rect& left,
                         Rect& right, f32 thickness) {
     f32 splitX = region.x + region.w * ratio;
-    Rect bar{splitX - thickness * 0.5f, region.y, thickness, region.h};
-    bool hovered = bar.Contains(m_mouse);
+    f32 half = thickness * 0.5f;
+    f32 hitHalf = std::max(half, 4.0f);  // wider invisible grab zone
+    Rect hit{splitX - hitHalf, region.y, hitHalf * 2.0f, region.h};
+    bool hovered = hit.Contains(m_mouse);
     if (hovered) m_hot = id;
     if (hovered && m_mousePressed[0]) m_active = id;
 
@@ -469,23 +471,27 @@ bool Context::SplitterV(u64 id, const Rect& region, f32& ratio, Rect& left,
         } else if (region.w > 1.0f) {
             ratio = std::clamp((m_mouse.x - region.x) / region.w, 0.12f, 0.88f);
             splitX = region.x + region.w * ratio;
-            bar.x = splitX - thickness * 0.5f;
         }
     }
 
-    left = {region.x, region.y, splitX - thickness * 0.5f - region.x, region.h};
-    right = {splitX + thickness * 0.5f, region.y,
-             region.Right() - (splitX + thickness * 0.5f), region.h};
-    m_draw.AddRectFilled(bar, (dragging || hovered) ? m_theme.accent
-                                                    : m_theme.windowBg);
+    left = {region.x, region.y, splitX - half - region.x, region.h};
+    right = {splitX + half, region.y, region.Right() - (splitX + half),
+             region.h};
+    // Seamless normally; show the accent line only while hovered/dragging.
+    if (dragging || hovered) {
+        m_draw.AddRectFilled({splitX - half, region.y, thickness, region.h},
+                             m_theme.accent);
+    }
     return dragging;
 }
 
 bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
                         Rect& bottom, f32 thickness) {
     f32 splitY = region.y + region.h * ratio;
-    Rect bar{region.x, splitY - thickness * 0.5f, region.w, thickness};
-    bool hovered = bar.Contains(m_mouse);
+    f32 half = thickness * 0.5f;
+    f32 hitHalf = std::max(half, 4.0f);
+    Rect hit{region.x, splitY - hitHalf, region.w, hitHalf * 2.0f};
+    bool hovered = hit.Contains(m_mouse);
     if (hovered) m_hot = id;
     if (hovered && m_mousePressed[0]) m_active = id;
 
@@ -496,15 +502,16 @@ bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
         } else if (region.h > 1.0f) {
             ratio = std::clamp((m_mouse.y - region.y) / region.h, 0.12f, 0.88f);
             splitY = region.y + region.h * ratio;
-            bar.y = splitY - thickness * 0.5f;
         }
     }
 
-    top = {region.x, region.y, region.w, splitY - thickness * 0.5f - region.y};
-    bottom = {region.x, splitY + thickness * 0.5f, region.w,
-              region.Bottom() - (splitY + thickness * 0.5f)};
-    m_draw.AddRectFilled(bar, (dragging || hovered) ? m_theme.accent
-                                                    : m_theme.windowBg);
+    top = {region.x, region.y, region.w, splitY - half - region.y};
+    bottom = {region.x, splitY + half, region.w,
+              region.Bottom() - (splitY + half)};
+    if (dragging || hovered) {
+        m_draw.AddRectFilled({region.x, splitY - half, region.w, thickness},
+                             m_theme.accent);
+    }
     return dragging;
 }
 
