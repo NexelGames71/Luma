@@ -96,9 +96,9 @@ struct LightingParams {
     Math::Vec3 skyHorizon{0.62f, 0.68f, 0.78f};  // IBL: horizon
     Math::Vec3 groundColor{0.16f, 0.16f, 0.17f};  // IBL: below horizon
     f32 iblIntensity = 1.0f;
-    bool sunShadows = true;       // cast shadows from the sun (directional)
-    f32 shadowExtent = 24.0f;     // half-size of the sun shadow area (world)
-    Math::Vec3 shadowFocus{0, 0, 0};  // center of the shadow area (world)
+    bool sunShadows = true;      // cast shadows from the sun (directional)
+    f32 shadowDistance = 80.0f;  // max world distance the cascades cover
+    f32 shadowSoftness = 1.6f;   // PCSS light size (bigger = softer penumbra)
 };
 
 // A world-space line-segment vertex (two per segment). Feature modules (grid,

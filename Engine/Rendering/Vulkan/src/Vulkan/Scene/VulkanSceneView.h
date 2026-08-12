@@ -72,13 +72,15 @@ private:
     GpuBuffer m_lineBuffer;
     GpuBuffer m_overlayBuffer;
 
-    // Sun shadow map (directional): depth-only render from the light, sampled in
-    // the mesh shader with PCF.
+    // Cascaded sun shadow maps (directional): a depth texture array, one layer
+    // per cascade, rendered depth-only from the light and sampled with PCSS.
     static constexpr u32 kShadowSize = 2048;
+    static constexpr u32 kCascades = 4;
     static constexpr VkFormat kShadowFormat = VK_FORMAT_D32_SFLOAT;
     VkImage m_shadowImage = VK_NULL_HANDLE;
     VkDeviceMemory m_shadowMem = VK_NULL_HANDLE;
-    VkImageView m_shadowView = VK_NULL_HANDLE;
+    VkImageView m_shadowArrayView = VK_NULL_HANDLE;          // 2D array (sampled)
+    VkImageView m_shadowLayerViews[kCascades] = {};          // per-cascade (RT)
     VkSampler m_shadowSampler = VK_NULL_HANDLE;
     VkPipelineLayout m_shadowLayout = VK_NULL_HANDLE;
     VkPipeline m_shadowPipeline = VK_NULL_HANDLE;

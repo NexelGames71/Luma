@@ -4,6 +4,7 @@ layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec3 inNormal;
 
 const int MAX_LIGHTS = 16;
+const int MAX_CASCADES = 4;
 
 struct Light {
     vec4 posType;
@@ -15,13 +16,16 @@ struct Light {
 layout(binding = 0) uniform SceneUBO {
     mat4 viewProj;
     vec4 camPos;
+    vec4 camForward;
     vec4 sunDir;
     vec4 sunColor;
     vec4 skyZenith;
     vec4 skyHorizon;
     vec4 groundColor;
     vec4 params;
-    mat4 lightViewProj;
+    vec4 shadowParams;
+    vec4 cascadeSplits;
+    mat4 cascadeViewProj[MAX_CASCADES];
     Light lights[MAX_LIGHTS];
 } u;
 

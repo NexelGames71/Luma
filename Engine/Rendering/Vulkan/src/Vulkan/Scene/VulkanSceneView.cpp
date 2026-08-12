@@ -1,5 +1,7 @@
 #include "Vulkan/Scene/VulkanSceneView.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -32,16 +34,20 @@ struct GpuLight {
     f32 color[4];     // rgb color, w intensity
     f32 spot[4];      // x cosInner, y cosOuter
 };
+constexpr u32 kCascadesUBO = 4;
 struct SceneUBO {
     Math::Mat4 viewProj;
     f32 camPos[4];
+    f32 camForward[4];
     f32 sunDir[4];
     f32 sunColor[4];  // rgb, w = intensity
     f32 skyZenith[4];
     f32 skyHorizon[4];
     f32 groundColor[4];
-    f32 params[4];  // x=iblIntensity, y=lightCount, z=sunShadows, w=1/shadowSize
-    Math::Mat4 lightViewProj;
+    f32 params[4];        // x=iblIntensity, y=lightCount, z=sunShadows, w=1/size
+    f32 shadowParams[4];  // x=softness, y=cascadeCount
+    f32 cascadeSplits[4];
+    Math::Mat4 cascadeViewProj[kCascadesUBO];
     GpuLight lights[kMaxLights];
 };
 
@@ -50,6 +56,13 @@ void SetVec3(f32* dst, const Math::Vec3& v, f32 w = 1.0f) {
     dst[1] = v.y;
     dst[2] = v.z;
     dst[3] = w;
+}
+
+// Transforms a world point by a column-major matrix (w = 1, no perspective).
+Math::Vec3 TransformPoint(const Math::Mat4& m, const Math::Vec3& p) {
+    return {m.m[0] * p.x + m.m[4] * p.y + m.m[8] * p.z + m.m[12],
+            m.m[1] * p.x + m.m[5] * p.y + m.m[9] * p.z + m.m[13],
+            m.m[2] * p.x + m.m[6] * p.y + m.m[10] * p.z + m.m[14]};
 }
 
 }  // namespace
@@ -117,7 +130,11 @@ VulkanSceneView::~VulkanSceneView() {
     if (m_shadowPipeline)
         vkDestroyPipeline(m_device, m_shadowPipeline, nullptr);
     if (m_shadowSampler) vkDestroySampler(m_device, m_shadowSampler, nullptr);
-    if (m_shadowView) vkDestroyImageView(m_device, m_shadowView, nullptr);
+    if (m_shadowArrayView)
+        vkDestroyImageView(m_device, m_shadowArrayView, nullptr);
+    for (VkImageView v : m_shadowLayerViews) {
+        if (v) vkDestroyImageView(m_device, v, nullptr);
+    }
     if (m_shadowImage) vkDestroyImage(m_device, m_shadowImage, nullptr);
     if (m_shadowMem) vkFreeMemory(m_device, m_shadowMem, nullptr);
     if (m_meshLayout) vkDestroyPipelineLayout(m_device, m_meshLayout, nullptr);
@@ -166,7 +183,7 @@ void VulkanSceneView::CreateShadowResources() {
     ii.format = kShadowFormat;
     ii.extent = {kShadowSize, kShadowSize, 1};
     ii.mipLevels = 1;
-    ii.arrayLayers = 1;
+    ii.arrayLayers = kCascades;
     ii.samples = VK_SAMPLE_COUNT_1_BIT;
     ii.tiling = VK_IMAGE_TILING_OPTIMAL;
     ii.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
@@ -184,13 +201,23 @@ void VulkanSceneView::CreateShadowResources() {
     VK_CHECK(vkAllocateMemory(m_device, &ai, nullptr, &m_shadowMem));
     VK_CHECK(vkBindImageMemory(m_device, m_shadowImage, m_shadowMem, 0));
 
-    VkImageViewCreateInfo vi{};
-    vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    vi.image = m_shadowImage;
-    vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    vi.format = kShadowFormat;
-    vi.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-    VK_CHECK(vkCreateImageView(m_device, &vi, nullptr, &m_shadowView));
+    // Array view for sampling (sampler2DArray) + per-layer views to render into.
+    VkImageViewCreateInfo av{};
+    av.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    av.image = m_shadowImage;
+    av.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    av.format = kShadowFormat;
+    av.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, kCascades};
+    VK_CHECK(vkCreateImageView(m_device, &av, nullptr, &m_shadowArrayView));
+    for (u32 i = 0; i < kCascades; ++i) {
+        VkImageViewCreateInfo lv{};
+        lv.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        lv.image = m_shadowImage;
+        lv.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        lv.format = kShadowFormat;
+        lv.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, i, 1};
+        VK_CHECK(vkCreateImageView(m_device, &lv, nullptr, &m_shadowLayerViews[i]));
+    }
 
     VkSamplerCreateInfo si{};
     si.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -246,7 +273,7 @@ void VulkanSceneView::CreateSceneUBO() {
     VK_CHECK(vkAllocateDescriptorSets(m_device, &setAlloc, &m_uboSet));
 
     VkDescriptorBufferInfo bufInfo{m_ubo.buffer, 0, sizeof(SceneUBO)};
-    VkDescriptorImageInfo imgInfo{m_shadowSampler, m_shadowView,
+    VkDescriptorImageInfo imgInfo{m_shadowSampler, m_shadowArrayView,
                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     VkWriteDescriptorSet writes[2]{};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -709,20 +736,83 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
         Perspective(scene.fovYRadians, aspect, scene.nearZ, scene.farZ) *
         scene.view;
     Mat4 invView = Inverse(scene.view);
+    Vec3 camPos{invView.m[12], invView.m[13], invView.m[14]};
+    Vec3 camFwd = Normalize(Vec3(-invView.m[8], -invView.m[9], -invView.m[10]));
+    Vec3 camRight = Normalize(Vec3(invView.m[0], invView.m[1], invView.m[2]));
+    Vec3 camUp = Normalize(Vec3(invView.m[4], invView.m[5], invView.m[6]));
 
-    // Sun shadow: an orthographic light-space matrix fit around the focus.
+    // --- Cascaded shadow map fit: split the view frustum and fit an ortho box
+    //     to each slice in light space. ---
     Vec3 sunDirN = Normalize(scene.lighting.sunDirection);
     Vec3 shadowUp = (sunDirN.y > 0.98f || sunDirN.y < -0.98f) ? Vec3(0, 0, 1)
                                                               : Vec3(0, 1, 0);
-    f32 ext = scene.lighting.shadowExtent;
-    Vec3 focus = scene.lighting.shadowFocus;
-    Vec3 lightEye = focus + sunDirN * (ext * 2.0f);
-    Mat4 lightViewProj = Ortho(-ext, ext, -ext, ext, 0.1f, ext * 4.0f) *
-                         LookAt(lightEye, focus, shadowUp);
+    f32 nearZ = scene.nearZ;
+    f32 farZ = scene.farZ < scene.lighting.shadowDistance
+                   ? scene.farZ
+                   : scene.lighting.shadowDistance;
+    f32 tanY = std::tan(scene.fovYRadians * 0.5f);
+    f32 tanX = tanY * aspect;
+
+    Mat4 cascadeVP[kCascades];
+    f32 splitFar[kCascades];
+    f32 lastFar = nearZ;
+    for (u32 c = 0; c < kCascades; ++c) {
+        f32 p = static_cast<f32>(c + 1) / static_cast<f32>(kCascades);
+        f32 logSplit = nearZ * std::pow(farZ / nearZ, p);
+        f32 uniSplit = nearZ + (farZ - nearZ) * p;
+        f32 cf = 0.6f * logSplit + 0.4f * uniSplit;
+        f32 cn = lastFar;
+        lastFar = cf;
+        splitFar[c] = cf;
+
+        Vec3 corners[8];
+        int k = 0;
+        for (f32 zd : {cn, cf}) {
+            Vec3 center = camPos + camFwd * zd;
+            f32 hh = tanY * zd, hw = tanX * zd;
+            corners[k++] = center + camUp * hh + camRight * hw;
+            corners[k++] = center + camUp * hh - camRight * hw;
+            corners[k++] = center - camUp * hh + camRight * hw;
+            corners[k++] = center - camUp * hh - camRight * hw;
+        }
+        Vec3 cc{0, 0, 0};
+        for (const Vec3& v : corners) cc = cc + v;
+        cc = cc * (1.0f / 8.0f);
+        f32 radius = 0.0f;
+        for (const Vec3& v : corners) {
+            Vec3 d = v - cc;
+            f32 len = std::sqrt(Dot(d, d));
+            if (len > radius) radius = len;
+        }
+        Mat4 lightView = LookAt(cc + sunDirN * (radius + 50.0f), cc, shadowUp);
+        Vec3 mn{1e9f, 1e9f, 1e9f}, mx{-1e9f, -1e9f, -1e9f};
+        for (const Vec3& v : corners) {
+            Vec3 lp = TransformPoint(lightView, v);
+            mn = Vec3(std::min(mn.x, lp.x), std::min(mn.y, lp.y),
+                      std::min(mn.z, lp.z));
+            mx = Vec3(std::max(mx.x, lp.x), std::max(mx.y, lp.y),
+                      std::max(mx.z, lp.z));
+        }
+        // Light looks down -z; distances are -z. Pull the near plane toward the
+        // light so tall casters outside the slice still shadow it.
+        f32 nearD = -mx.z - 40.0f;
+        if (nearD < 0.05f) nearD = 0.05f;
+        f32 farD = -mn.z;
+        cascadeVP[c] =
+            Ortho(mn.x, mx.x, mn.y, mx.y, nearD, farD) * lightView;
+    }
 
     // Fill the per-frame camera + lighting UBO.
     SceneUBO ubo{};
-    ubo.lightViewProj = lightViewProj;
+    for (u32 c = 0; c < kCascades; ++c) {
+        ubo.cascadeViewProj[c] = cascadeVP[c];
+        ubo.cascadeSplits[c] = splitFar[c];
+    }
+    ubo.camForward[0] = camFwd.x;
+    ubo.camForward[1] = camFwd.y;
+    ubo.camForward[2] = camFwd.z;
+    ubo.shadowParams[0] = scene.lighting.shadowSoftness;
+    ubo.shadowParams[1] = static_cast<f32>(kCascades);
     ubo.viewProj = viewProj;
     ubo.camPos[0] = invView.m[12];
     ubo.camPos[1] = invView.m[13];
@@ -790,16 +880,32 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
         vkCmdPipelineBarrier(m_cmd, srcS, dstS, 0, 0, nullptr, 0, nullptr, 1, &b);
     };
 
-    // --- Sun shadow depth pass (renders instances from the light) ---
-    barrier(m_shadowImage, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, 0,
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
-    {
+    // --- Cascaded sun shadow depth passes (one per cascade layer) ---
+    auto shadowLayerBarrier = [&](VkImageLayout oldL, VkImageLayout newL,
+                                  VkAccessFlags src, VkAccessFlags dst,
+                                  VkPipelineStageFlags srcS,
+                                  VkPipelineStageFlags dstS) {
+        VkImageMemoryBarrier b{};
+        b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        b.oldLayout = oldL;
+        b.newLayout = newL;
+        b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        b.image = m_shadowImage;
+        b.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, kCascades};
+        b.srcAccessMask = src;
+        b.dstAccessMask = dst;
+        vkCmdPipelineBarrier(m_cmd, srcS, dstS, 0, 0, nullptr, 0, nullptr, 1, &b);
+    };
+    shadowLayerBarrier(VK_IMAGE_LAYOUT_UNDEFINED,
+                       VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, 0,
+                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                       VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+    for (u32 c = 0; c < kCascades; ++c) {
         VkRenderingAttachmentInfo sd{};
         sd.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        sd.imageView = m_shadowView;
+        sd.imageView = m_shadowLayerViews[c];
         sd.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
         sd.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         sd.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -824,7 +930,7 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
                 u32 prim = static_cast<u32>(inst.primitive);
                 if (prim >= kPrimitiveCount) prim = 0;
                 const Primitive& mesh = m_primitives[prim];
-                Math::Mat4 mvp = lightViewProj * inst.model;
+                Math::Mat4 mvp = cascadeVP[c] * inst.model;
                 vkCmdPushConstants(m_cmd, m_shadowLayout,
                                    VK_SHADER_STAGE_VERTEX_BIT, 0,
                                    sizeof(Math::Mat4), &mvp);
@@ -837,12 +943,12 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
         }
         vkCmdEndRendering(m_cmd);
     }
-    barrier(m_shadowImage, VK_IMAGE_ASPECT_DEPTH_BIT,
-            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+    shadowLayerBarrier(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                       VK_ACCESS_SHADER_READ_BIT,
+                       VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
     barrier(m_msaaColor, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,

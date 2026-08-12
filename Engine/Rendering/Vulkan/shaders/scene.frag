@@ -6,6 +6,7 @@
 // tonemapped + gamma-encoded to match the sky pass on the UNORM target.
 
 const int MAX_LIGHTS = 16;
+const int MAX_CASCADES = 4;
 
 struct Light {
     vec4 posType;   // xyz = position, w = type (0 dir, 1 point, 2 spot)
@@ -17,17 +18,20 @@ struct Light {
 layout(binding = 0) uniform SceneUBO {
     mat4 viewProj;
     vec4 camPos;
+    vec4 camForward;  // xyz = camera forward (for cascade selection)
     vec4 sunDir;      // xyz dir TO sun
     vec4 sunColor;    // rgb, w = intensity
     vec4 skyZenith;
     vec4 skyHorizon;
     vec4 groundColor;
-    vec4 params;      // x=iblIntensity, y=lightCount, z=sunShadows, w=1/shadowSize
-    mat4 lightViewProj;
+    vec4 params;         // x=iblIntensity, y=lightCount, z=sunShadows, w=1/size
+    vec4 shadowParams;   // x=softness, y=cascadeCount
+    vec4 cascadeSplits;  // per-cascade far view-depth
+    mat4 cascadeViewProj[MAX_CASCADES];
     Light lights[MAX_LIGHTS];
 } u;
 
-layout(binding = 1) uniform sampler2D shadowMap;
+layout(binding = 1) uniform sampler2DArray shadowMap;
 
 layout(push_constant) uniform Push {
     mat4 model;
@@ -39,26 +43,69 @@ layout(location = 0) in vec3 vWorldPos;
 layout(location = 1) in vec3 vNormal;
 layout(location = 0) out vec4 outColor;
 
-// PCF sun shadow: 1.0 = fully lit, 0.0 = fully shadowed.
-float sunShadow(vec3 N, vec3 L) {
-    if (u.params.z < 0.5) return 1.0;
-    vec4 sc = u.lightViewProj * vec4(vWorldPos, 1.0);
-    vec3 proj = sc.xyz / sc.w;
+// Poisson disk for the PCSS blocker search + filtering.
+const vec2 POISSON[16] = vec2[](
+    vec2(-0.94201624, -0.39906216), vec2(0.94558609, -0.76890725),
+    vec2(-0.09418410, -0.92938870), vec2(0.34495938, 0.29387760),
+    vec2(-0.91588581, 0.45771432), vec2(-0.81544232, -0.87912464),
+    vec2(-0.38277543, 0.27676845), vec2(0.97484398, 0.75648379),
+    vec2(0.44323325, -0.97511554), vec2(0.53742981, -0.47373420),
+    vec2(-0.26496911, -0.41893023), vec2(0.79197514, 0.19090188),
+    vec2(-0.24188840, 0.99706507), vec2(-0.81409955, 0.91437590),
+    vec2(0.19984126, 0.78641367), vec2(0.14383161, -0.14100790));
+
+// Percentage-closer soft shadows in one cascade layer.
+float pcss(int cascade, vec3 proj, float bias) {
     vec2 uv = proj.xy * 0.5 + 0.5;
+    float receiver = proj.z;
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ||
-        proj.z > 1.0 || proj.z < 0.0) {
+        receiver > 1.0 || receiver < 0.0) {
         return 1.0;
     }
-    float bias = max(0.0025 * (1.0 - max(dot(N, L), 0.0)), 0.0006);
     float texel = u.params.w;
-    float sum = 0.0;
-    for (int x = -1; x <= 1; ++x) {
-        for (int y = -1; y <= 1; ++y) {
-            float d = texture(shadowMap, uv + vec2(x, y) * texel).r;
-            sum += (proj.z - bias > d) ? 0.0 : 1.0;
+    // Blocker search: average depth of occluders in a light-sized region.
+    float searchR = u.shadowParams.x * texel * 6.0;
+    float blockerSum = 0.0;
+    int blockers = 0;
+    for (int i = 0; i < 16; ++i) {
+        float d = texture(shadowMap, vec3(uv + POISSON[i] * searchR, cascade)).r;
+        if (d < receiver - bias) {
+            blockerSum += d;
+            ++blockers;
         }
     }
-    return sum / 9.0;
+    if (blockers == 0) return 1.0;
+    float avgBlocker = blockerSum / float(blockers);
+    // Penumbra grows with receiver-blocker separation (PCSS estimate).
+    float penumbra = (receiver - avgBlocker) / max(avgBlocker, 1e-4);
+    float filterR = clamp(penumbra * u.shadowParams.x * texel * 30.0, texel,
+                          texel * 12.0);
+    float sum = 0.0;
+    for (int i = 0; i < 16; ++i) {
+        float d = texture(shadowMap, vec3(uv + POISSON[i] * filterR, cascade)).r;
+        sum += (receiver - bias > d) ? 0.0 : 1.0;
+    }
+    return sum / 16.0;
+}
+
+// Cascaded sun shadow: pick a cascade by view depth, then PCSS it.
+float sunShadow(vec3 N, vec3 L) {
+    if (u.params.z < 0.5) return 1.0;
+    float viewDepth = dot(vWorldPos - u.camPos.xyz, u.camForward.xyz);
+    int count = int(u.shadowParams.y);
+    int cascade = count - 1;
+    for (int i = 0; i < count; ++i) {
+        if (viewDepth < u.cascadeSplits[i]) {
+            cascade = i;
+            break;
+        }
+    }
+    vec4 sc = u.cascadeViewProj[cascade] * vec4(vWorldPos, 1.0);
+    vec3 proj = sc.xyz / sc.w;
+    // Larger bias for farther, coarser cascades.
+    float bias = max(0.0018 * (1.0 - max(dot(N, L), 0.0)), 0.0004) *
+                 (1.0 + float(cascade) * 0.6);
+    return pcss(cascade, proj, bias);
 }
 
 const float PI = 3.14159265358979323846;
