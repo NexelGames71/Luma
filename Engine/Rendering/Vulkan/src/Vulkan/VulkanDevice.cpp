@@ -115,6 +115,8 @@ VulkanDevice::VulkanDevice(VkInstance instance, VkSurfaceKHR surface)
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
+    // glslc lowers `discard` (grid/sky shaders) to OpDemoteToHelperInvocation.
+    features13.shaderDemoteToHelperInvocation = VK_TRUE;
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
