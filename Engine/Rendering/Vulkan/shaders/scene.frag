@@ -22,9 +22,12 @@ layout(binding = 0) uniform SceneUBO {
     vec4 skyZenith;
     vec4 skyHorizon;
     vec4 groundColor;
-    vec4 params;      // x = iblIntensity, y = lightCount
+    vec4 params;      // x=iblIntensity, y=lightCount, z=sunShadows, w=1/shadowSize
+    mat4 lightViewProj;
     Light lights[MAX_LIGHTS];
 } u;
+
+layout(binding = 1) uniform sampler2D shadowMap;
 
 layout(push_constant) uniform Push {
     mat4 model;
@@ -35,6 +38,28 @@ layout(push_constant) uniform Push {
 layout(location = 0) in vec3 vWorldPos;
 layout(location = 1) in vec3 vNormal;
 layout(location = 0) out vec4 outColor;
+
+// PCF sun shadow: 1.0 = fully lit, 0.0 = fully shadowed.
+float sunShadow(vec3 N, vec3 L) {
+    if (u.params.z < 0.5) return 1.0;
+    vec4 sc = u.lightViewProj * vec4(vWorldPos, 1.0);
+    vec3 proj = sc.xyz / sc.w;
+    vec2 uv = proj.xy * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ||
+        proj.z > 1.0 || proj.z < 0.0) {
+        return 1.0;
+    }
+    float bias = max(0.0025 * (1.0 - max(dot(N, L), 0.0)), 0.0006);
+    float texel = u.params.w;
+    float sum = 0.0;
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float d = texture(shadowMap, uv + vec2(x, y) * texel).r;
+            sum += (proj.z - bias > d) ? 0.0 : 1.0;
+        }
+    }
+    return sum / 9.0;
+}
 
 const float PI = 3.14159265358979323846;
 
@@ -104,10 +129,10 @@ void main() {
     float rough = clamp(pc.material.x, 0.04, 1.0);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
-    // Sun (Environment) direct.
+    // Sun (Environment) direct, shadowed.
     vec3 sunL = normalize(u.sunDir.xyz);
     vec3 direct = brdf(N, V, sunL, albedo, metallic, rough, F0) *
-                  u.sunColor.rgb * u.sunColor.w;
+                  u.sunColor.rgb * u.sunColor.w * sunShadow(N, sunL);
 
     // Punctual lights.
     int count = int(u.params.y);

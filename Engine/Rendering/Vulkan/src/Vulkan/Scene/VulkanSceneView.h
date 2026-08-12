@@ -32,8 +32,10 @@ private:
     void DestroyTargets();
     void CreateLayouts();
     void CreateSceneUBO();
+    void CreateShadowResources();
     VkPipeline CreateMeshPipeline(const std::string& shaderDir);
     VkPipeline CreateLinePipeline(const std::string& shaderDir, bool depthTest);
+    VkPipeline CreateShadowPipeline(const std::string& shaderDir);
     void CreatePrimitives();
     void UploadLines(GpuBuffer& buffer, const LineVertex* lines, u32 count);
 
@@ -69,6 +71,17 @@ private:
     VkPipeline m_overlayPipeline = VK_NULL_HANDLE;  // no-depth lines
     GpuBuffer m_lineBuffer;
     GpuBuffer m_overlayBuffer;
+
+    // Sun shadow map (directional): depth-only render from the light, sampled in
+    // the mesh shader with PCF.
+    static constexpr u32 kShadowSize = 2048;
+    static constexpr VkFormat kShadowFormat = VK_FORMAT_D32_SFLOAT;
+    VkImage m_shadowImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_shadowMem = VK_NULL_HANDLE;
+    VkImageView m_shadowView = VK_NULL_HANDLE;
+    VkSampler m_shadowSampler = VK_NULL_HANDLE;
+    VkPipelineLayout m_shadowLayout = VK_NULL_HANDLE;
+    VkPipeline m_shadowPipeline = VK_NULL_HANDLE;
 
     std::unique_ptr<VulkanSkyPass> m_skyPass;    // its own module (Sky/)
     std::unique_ptr<VulkanGridPass> m_gridPass;  // its own module (Grid/)

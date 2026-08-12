@@ -44,7 +44,8 @@ MeshData BuildPlane() {
                   {{0.5f, 0, -0.5f}, n},
                   {{0.5f, 0, 0.5f}, n},
                   {{-0.5f, 0, 0.5f}, n}};
-    m.indices = {0, 1, 2, 2, 3, 0};
+    // CCW when viewed from +Y so the lit face points up (matches the +Y normal).
+    m.indices = {0, 2, 1, 0, 3, 2};
     return m;
 }
 

@@ -141,6 +141,7 @@ SceneView EditorScreen::BuildSceneView() {
     scene.instanceCount = static_cast<u32>(m_instances.size());
     scene.lights = m_lights.data();
     scene.lightCount = static_cast<u32>(m_lights.size());
+    scene.lighting.shadowFocus = m_camTarget;  // keep shadows around the view
 
     // Gizmo overlay for the selected entity.
     if (m_scene.IsValid(m_selected) &&

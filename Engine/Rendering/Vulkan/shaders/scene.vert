@@ -21,6 +21,7 @@ layout(binding = 0) uniform SceneUBO {
     vec4 skyHorizon;
     vec4 groundColor;
     vec4 params;
+    mat4 lightViewProj;
     Light lights[MAX_LIGHTS];
 } u;
 

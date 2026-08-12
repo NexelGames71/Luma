@@ -28,7 +28,7 @@ endif()
 
 set(_luma_spv_outputs)
 foreach(shader ui.vert ui.frag scene.vert scene.frag sky.vert sky.frag
-               grid.vert grid.frag line.vert line.frag)
+               grid.vert grid.frag line.vert line.frag shadow.vert shadow.frag)
     add_custom_command(
         OUTPUT ${_luma_shader_out}/${shader}.spv
         COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3

@@ -182,6 +182,20 @@ inline Mat4 LookAt(const Vec3& eye, const Vec3& center, const Vec3& up) {
     return r;
 }
 
+// Right-handed orthographic projection, depth 0..1 (Vulkan). Used for the sun
+// shadow map's light-space projection.
+inline Mat4 Ortho(f32 l, f32 r, f32 b, f32 t, f32 nearZ, f32 farZ) {
+    Mat4 m;
+    m.m[0] = 2.0f / (r - l);
+    m.m[5] = 2.0f / (t - b);
+    m.m[10] = -1.0f / (farZ - nearZ);
+    m.m[12] = -(r + l) / (r - l);
+    m.m[13] = -(t + b) / (t - b);
+    m.m[14] = -nearZ / (farZ - nearZ);
+    m.m[15] = 1.0f;
+    return m;
+}
+
 // Vulkan perspective: depth 0..1, with the Y axis flipped for the framebuffer.
 inline Mat4 Perspective(f32 fovYRadians, f32 aspect, f32 nearZ, f32 farZ) {
     f32 t = std::tan(fovYRadians * 0.5f);
