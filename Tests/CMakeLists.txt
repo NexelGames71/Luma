@@ -21,11 +21,14 @@ add_executable(LumaTests
     Slate/DrawListTests.cpp
     Slate/IconTests.cpp
     Slate/WidgetTests.cpp
+    Asset/AssetIdTests.cpp
+    Asset/AssetScannerTests.cpp
+    Asset/AssetRegistryTests.cpp
     VFS/PathTests.cpp
     VFS/VFSTests.cpp
     VFS/FileWatcherTests.cpp)
 
-target_link_libraries(LumaTests PRIVATE Luma::Core Luma::Project Luma::Serialization Luma::Scene Luma::Slate Luma::VFS Catch2::Catch2WithMain)
+target_link_libraries(LumaTests PRIVATE Luma::Core Luma::Project Luma::Serialization Luma::Scene Luma::Slate Luma::Asset Luma::VFS Catch2::Catch2WithMain)
 
 set_target_properties(LumaTests PROPERTIES FOLDER "Tests")
 
