@@ -179,10 +179,15 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
         // normal text at rest. The label rect spans the full pill height so
         // LabelIn centers the baseline inside the pill (a rect scaled to
         // the text height starts mid-pill and clips the bottom off).
+        // Account for LabelIn's internal left padding (space.lg) so the
+        // glyph sits snug against the icon rather than drifting right.
         Slate::Color labelRest = t.text;
         Slate::Color labelHover = Slate::Color::RGB(20, 30, 24);
-        ui.LabelIn({drawR.x + kImportPadX + kImportIconSide + 6.0f,
-                    drawR.y, importTextSize.x + 4.0f, drawR.h},
+        constexpr f32 kLabelGap = 4.0f;
+        f32 labelX = drawR.x + kImportPadX + kImportIconSide + kLabelGap -
+                     t.space.lg;  // cancel LabelIn's internal padX
+        ui.LabelIn({labelX, drawR.y, importTextSize.x + t.space.lg * 2.0f,
+                    drawR.h},
                    "Import", Slate::Mix(labelRest, labelHover, hoverT),
                    Align::Left);
         (void)clicked;
