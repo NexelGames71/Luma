@@ -557,13 +557,21 @@ void ContentBrowserPanel::Draw(Slate::Context& ui, const Slate::Rect& body,
     // surrounded by a margin rather than flush with the edges.
     Rect bodyArea{body.x, bodyTop, body.w, body.Bottom() - bodyTop};
     ui.Panel(bodyArea, t.surface1);
+
+    // Vertical splitter between the tree and the grid. The user can drag
+    // the divider to resize the tree column (SplitterV clamps to a sane
+    // range and sets m_treeRatio). The tree sits with a small margin
+    // inside the left half; the grid fills the right half with the same
+    // margin.
+    Rect treeSplit{}, gridSplit{};
+    ui.SplitterV(Slate::Context::ID("cb.splitter"), bodyArea, m_treeRatio,
+                 treeSplit, gridSplit, 1.0f);
     constexpr f32 kTreeMargin = 6.0f;
-    Rect treePane{body.x + kTreeMargin, bodyTop + kTreeMargin,
-                 kTreePaneW - kTreeMargin,
-                 bodyArea.Bottom() - bodyTop - kTreeMargin * 2.0f};
-    Rect gridPane{treePane.Right() + kTreeMargin, bodyTop,
-                  body.w - treePane.Right() - kTreeMargin - kTreeMargin,
-                  bodyArea.Bottom() - bodyTop};
+    Rect treePane{treeSplit.x + kTreeMargin, bodyTop + kTreeMargin,
+                  treeSplit.w - kTreeMargin * 2.0f,
+                  bodyArea.h - kTreeMargin * 2.0f};
+    Rect gridPane{gridSplit.x + kTreeMargin, bodyTop,
+                  gridSplit.w - kTreeMargin * 2.0f, bodyArea.h};
 
     DrawToolbar(ui, toolbar);
     // Reusable FileSystemTreePanel handles the dark inset folder list.

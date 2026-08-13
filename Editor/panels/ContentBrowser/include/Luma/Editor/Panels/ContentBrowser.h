@@ -76,6 +76,10 @@ private:
     // reports the selected folder via OnFolderSelected). Kept in sync
     // with m_currentFolder both ways.
     FileSystemTreePanel m_tree;
+    // Fraction (0..1) of the body area's width occupied by the tree
+    // pane. Mutated by the SplitterV so the user can resize the tree
+    // vs. grid columns. Clamped by SplitterV to [0.12, 0.88].
+    float m_treeRatio = 0.22f;
 
     // Filter drop-down state: true while the popup listing asset-type
     // filters is open. Toggled by the down/up chevron button inside the
@@ -106,7 +110,6 @@ private:
 
     // Layout constants.
     static constexpr f32 kToolbarH = 36.0f;
-    static constexpr f32 kTreePaneW = 220.0f;
     static constexpr f32 kTileSize = 80.0f;
     static constexpr f32 kTileGap = 8.0f;
 
