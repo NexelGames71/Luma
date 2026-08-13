@@ -44,6 +44,13 @@ public:
                        f32 spread = 6.0f);
     void AddImage(TextureHandle texture, const Rect& dst, const Rect& uv,
                   Color tint);
+    // Draws `texture` as a square of side 2*half centered at `center`,
+    // rotated counter-clockwise by `rotationRad` (radians) around its
+    // center, tinted with `color`. UVs cover the full texture (0,0)..(1,1)
+    // mapped to the four rotated corners so the image reads as rotated.
+    void AddImageRotated(TextureHandle texture, Vec2 center, f32 half,
+                        f32 rotationRad, Color color,
+                        const Rect& uv = Rect{0.0f, 0.0f, 1.0f, 1.0f});
     void AddText(const Font& font, Vec2 pos, std::string_view text, Color color);
 
     // Finalizes and returns draw data valid until the next Begin().

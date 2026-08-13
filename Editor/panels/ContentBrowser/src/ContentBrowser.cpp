@@ -20,12 +20,14 @@ void ContentBrowserPanel::SetIcons(Luma::TextureHandle sortUp,
                                    Luma::TextureHandle sortDown,
                                    Luma::TextureHandle searchGlass,
                                    Luma::TextureHandle folder,
-                                   Luma::TextureHandle reload) {
+                                   Luma::TextureHandle reload,
+                                   Luma::TextureHandle importTex) {
     m_texSortUp = sortUp;
     m_texSortDown = sortDown;
     m_texSearchGlass = searchGlass;
     m_texFolder = folder;
     m_texReload = reload;
+    m_texImport = importTex;
 }
 
 void ContentBrowserPanel::ResetNavigation() {
@@ -84,6 +86,10 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     ui.GradientRect(rect, t.surface2, t.surface1);
     ui.Panel({rect.x, rect.Bottom() - 1.0f, rect.w, 1.0f}, t.separator);
 
+    // Shared chrome height for all toolbar-row controls (reload, import,
+    // search bar).
+    constexpr f32 kBarH = 24.0f;
+
     // Reload button (re-scans the registry). Rendered as a bare icon —
     // no button chrome: draw the PNG directly, 20px inside a 24px hit
     // rect, tinted brighter on hover. Back/forward navigation now lives
@@ -112,21 +118,67 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
         if (clicked && m_registry) m_registry->Scan();
     }
 
+    // Import button (round-rect pill with "Import" label + a 90-deg-CW
+    // rotated green import icon). Sits between the reload icon and the
+    // breadcrumb box.
+    const Slate::Color kImportGreen = Slate::Color::RGB(76, 180, 120);
+    constexpr f32 kImportIconSide = 16.0f;
+    constexpr f32 kImportPadX = 8.0f;
+    const Slate::Font& uiF = ui.uiFont();
+    Vec2 importTextSize = uiF.Measure("Import");
+    f32 importW = kImportIconSide + 6.0f + importTextSize.x +
+                  kImportPadX * 2.0f;
+    Rect importR{rect.x + 40.0f, rect.y + 6.0f, importW, kBarH};
+    {
+        bool hover = importR.Contains(ui.mouse());
+        if (hover) ui.RequestCursor(Luma::CursorShape::Hand);
+        if (hover && ui.mousePressed(0)) m_importPressed = true;
+        bool clicked = false;
+        if (ui.mouseReleased(0)) {
+            if (m_importPressed && hover) clicked = true;
+            m_importPressed = false;
+        }
+        // Pill background: green-tinted when hovered, muted otherwise.
+        ui.PanelRounded(
+            importR, hover ? kImportGreen : t.surface3, t.radius.pill);
+        ui.PanelRoundedBordered(importR, t.outline, t.outline, t.radius.pill,
+                                t.border.hairline);
+        // Rotated (90deg CW) green icon on the left of the pill.
+        f32 iconCx = importR.x + kImportPadX + kImportIconSide * 0.5f;
+        f32 iconCy = importR.y + importR.h * 0.5f;
+        if (m_texImport) {
+            ui.drawList().AddImageRotated(
+                m_texImport, {iconCx, iconCy}, kImportIconSide * 0.5f,
+                1.5707963f,  // pi/2 = 90 deg CW (rotate the quad so the
+                             // image reads rotated)
+                kImportGreen);
+        }
+        // "Import" label to the right of the icon.
+        ui.LabelIn({importR.x + kImportPadX + kImportIconSide + 6.0f,
+                    importR.y + (importR.h - importTextSize.y) * 0.5f,
+                    importTextSize.x + 4.0f, importR.h},
+                   "Import",
+                   hover ? Slate::Color::RGB(20, 30, 24) : t.text,
+                   Align::Left);
+        (void)clicked;
+    }
+    constexpr f32 kImportGap = 8.0f;
+    f32 contentStartX = importR.Right() + kImportGap;
+
     // Search bar with embedded filter toggle.
-    // Layout: [reload] [breadcrumb segments...] [search][toggle]
+    // Layout: [reload] [Import] [breadcrumb...] [search][toggle]
     // The toggle lives inside the bar's right edge and shows a down chevron
     // when the filter menu is closed / up chevron when open.
-    constexpr f32 kBarH = 24.0f;
     constexpr f32 kToggleW = 26.0f;
     constexpr f32 kSepW = 1.0f;
-    constexpr f32 kBarMaxW = 240.0f;
-    constexpr f32 kBarGap = 8.0f;
+    constexpr f32 kBarMaxW = 200.0f;
+    constexpr f32 kBarGap = 4.0f;
     f32 barRight = rect.Right() - 8.0f;
     f32 toggleX = barRight - kToggleW;
     // Keep the search bar a fixed, Unreal-style width (not the full
     // toolbar); right-align it against the filter toggle.
-    f32 barW = std::min(kBarMaxW, toggleX - (rect.x + 40.0f));
-    if (barW < 140.0f) barW = 140.0f;
+    f32 barW = std::min(kBarMaxW, toggleX - contentStartX);
+    if (barW < 120.0f) barW = 120.0f;
     f32 barX = toggleX - kSepW - barW;
     Rect barR{barX, rect.y + 6.0f, barW, kBarH};
     Rect textR{barR.x, barR.y, barR.w - kToggleW - kSepW, barR.h};
@@ -171,9 +223,9 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     // the last word is never clipped. No folder icon; no hover/highlight
     // on segments (the text is the click target).
     constexpr f32 kSegH = 20.0f;
-    constexpr f32 kSegPadX = 8.0f;
+    constexpr f32 kSegPadX = 4.0f;
     constexpr f32 kChevW = 16.0f;
-    constexpr f32 kBoxPad = 8.0f;   // left/right padding inside the box
+    constexpr f32 kBoxPad = 2.0f;   // left/right padding inside the box
     const Slate::Font& f = ui.uiFont();
 
     // Build the segment list first so we can measure the total content
@@ -205,13 +257,13 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     f32 contentW = kBoxPad;  // left padding
     for (usize i = 0; i < segs.size(); ++i) {
         if (i > 0) contentW += 2.0f + kChevW;
-        contentW += f.Measure(segs[i].label).x + kSegPadX * 2.0f;
+        contentW += f.Measure(segs[i].label).x + kSegPadX;
     }
     contentW += kBoxPad;  // right padding
 
     // Box: sized to content, capped to the available gap (so a very long
     // path can't push the box past the search bar).
-    f32 bLeft = rect.x + 40.0f;
+    f32 bLeft = contentStartX;
     f32 bMaxRight = barX - kBarGap;
     f32 boxW = std::min(contentW, bMaxRight - bLeft);
     Rect boxR{bLeft, rect.y + 6.0f, boxW, kBarH};
@@ -240,10 +292,14 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     };
     // No-chrome segment: hit-test inline (no hover/active fill drawn) and
     // lay down plain text. Tints the leaf (current folder) in textDim.
+    // Uses Context::Label (direct position) instead of LabelIn because
+    // LabelIn always injects m_theme.space.lg (12px) of left padding,
+    // which would push each segment's text 12px right of its cursor and
+    // clip the right edge inside a box sized exactly to the text.
     auto drawSegment = [&](const char* label,
                            const std::filesystem::path& target, bool isLast) {
         Vec2 ts = f.Measure(label);
-        f32 segW = ts.x + kSegPadX * 2.0f;
+        f32 segW = ts.x + kSegPadX;
         Rect r{x, yMid, segW, kSegH};
         bool hover = r.Contains(ui.mouse());
         if (hover) ui.RequestCursor(Luma::CursorShape::Hand);
@@ -252,9 +308,10 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
             if (m_breadPressed && hover) NavigateTo(target);
             m_breadPressed = false;
         }
-        ui.LabelIn({r.x + kSegPadX, r.y + (r.h - ts.y) * 0.5f, r.w - kSegPadX,
-                    r.h},
-                   label, isLast ? t.textDim : t.text, Align::Left);
+        // Center the text baseline within the segment band (kSegH) and
+        // left-align to the cursor (no implicit padding).
+        f32 textY = yMid + (kSegH - f.LineHeight()) * 0.5f;
+        ui.Label({x, textY}, label, isLast ? t.textDim : t.text);
         x += segW;
     };
 

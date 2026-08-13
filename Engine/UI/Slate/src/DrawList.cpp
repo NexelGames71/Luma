@@ -269,6 +269,34 @@ void DrawList::AddImage(TextureHandle texture, const Rect& dst, const Rect& uv,
     AddQuad(texture, dst, uv, tint);
 }
 
+void DrawList::AddImageRotated(TextureHandle texture, Vec2 center, f32 half,
+                               f32 rotationRad, Color color,
+                               const Rect& uv) {
+    EnsureCommand(texture);
+    u32 base = static_cast<u32>(m_vertices.size());
+    u32 packed = color.Packed();
+    // Standard UV corners (TL, TR, BR, BL) of the source rect.
+    f32 u0 = uv.x, u1 = uv.Right(), v0 = uv.y, v1 = uv.Bottom();
+    struct Corner { Vec2 pos; f32 u, v; };
+    Corner corners[4] = {
+        {{-half, -half}, u0, v0},  // TL
+        {{+half, -half}, u1, v0},  // TR
+        {{+half, +half}, u1, v1},  // BR
+        {{-half, +half}, u0, v1},  // BL
+    };
+    f32 c = std::cos(rotationRad);
+    f32 s = std::sin(rotationRad);
+    for (int i = 0; i < 4; ++i) {
+        Vec2 p = corners[i].pos;
+        Vec2 rp{p.x * c - p.y * s, p.x * s + p.y * c};
+        m_vertices.push_back({center.x + rp.x, center.y + rp.y, corners[i].u,
+                              corners[i].v, packed});
+    }
+    u32 quad[6] = {base, base + 1, base + 2, base + 2, base + 3, base};
+    for (u32 i : quad) m_indices.push_back(i);
+    m_commands.back().indexCount += 6;
+}
+
 void DrawList::AddText(const Font& font, Vec2 pos, std::string_view text,
                        Color color) {
     if (!font.Valid()) return;

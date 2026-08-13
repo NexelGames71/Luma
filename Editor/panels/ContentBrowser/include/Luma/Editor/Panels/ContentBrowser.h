@@ -39,14 +39,15 @@ public:
     AssetRegistry* Registry() const noexcept { return m_registry; }
 
     // Loads the chrome PNGs the panel wants (sort up/down, search glass,
-    // folder, reload). Called once by EditorScreen after the renderer is
-    // ready; missing files just leave the panel falling back to
-    // procedural glyphs. The panel does not own the renderer or the
+    // folder, reload, import). Called once by EditorScreen after the
+    // renderer is ready; missing files just leave the panel falling back
+    // to procedural glyphs. The panel does not own the renderer or the
     // textures.
     void SetIcons(Luma::TextureHandle sortUp, Luma::TextureHandle sortDown,
                   Luma::TextureHandle searchGlass,
                   Luma::TextureHandle folder,
-                  Luma::TextureHandle reload);
+                  Luma::TextureHandle reload,
+                  Luma::TextureHandle importTex);
 
     // Clears the navigation stack (e.g. after the project is reloaded).
     void ResetNavigation();
@@ -80,6 +81,9 @@ private:
     // True between a press over the reload icon and its release, so a
     // press-then-drag-off release doesn't trigger a scan.
     bool m_reloadPressed = false;
+    // True between a press over the Import button and its release, so a
+    // press-then-drag-off release doesn't fire Import.
+    bool m_importPressed = false;
     // Rect of the toggle button when the menu was last opened; the popup
     // anchors below it. Refreshed by DrawToolbar each frame.
     Slate::Rect m_filterAnchor{};
@@ -92,6 +96,7 @@ private:
     Luma::TextureHandle m_texSearchGlass = 0;
     Luma::TextureHandle m_texFolder = 0;
     Luma::TextureHandle m_texReload = 0;
+    Luma::TextureHandle m_texImport = 0;
 
     // Layout constants.
     static constexpr f32 kToolbarH = 36.0f;

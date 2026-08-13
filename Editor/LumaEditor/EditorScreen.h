@@ -56,9 +56,10 @@ public:
     // (any zero handle) fall back to procedural glyphs.
     void SetContentBrowserIcons(TextureHandle sortUp, TextureHandle sortDown,
                                 TextureHandle searchGlass,
-                                TextureHandle folder, TextureHandle reload) {
+                                TextureHandle folder, TextureHandle reload,
+                                TextureHandle importTex) {
         m_contentBrowser.SetIcons(sortUp, sortDown, searchGlass, folder,
-                                   reload);
+                                   reload, importTex);
     }
 
 private:
