@@ -19,11 +19,13 @@ ContentBrowserPanel::ContentBrowserPanel() = default;
 void ContentBrowserPanel::SetIcons(Luma::TextureHandle sortUp,
                                    Luma::TextureHandle sortDown,
                                    Luma::TextureHandle searchGlass,
-                                   Luma::TextureHandle folder) {
+                                   Luma::TextureHandle folder,
+                                   Luma::TextureHandle reload) {
     m_texSortUp = sortUp;
     m_texSortDown = sortDown;
     m_texSearchGlass = searchGlass;
     m_texFolder = folder;
+    m_texReload = reload;
 }
 
 void ContentBrowserPanel::ResetNavigation() {
@@ -82,21 +84,21 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     ui.GradientRect(rect, t.surface2, t.surface1);
     ui.Panel({rect.x, rect.Bottom() - 1.0f, rect.w, 1.0f}, t.separator);
 
-    // Up button (disabled when at root).
-    bool atRoot = m_currentFolder.empty();
-    Rect upR{rect.x + 8.0f, rect.y + 6.0f, 24.0f, 24.0f};
-    if (!atRoot && ui.Button(Slate::Context::ID("cb.up"), upR, "Up")) {
-        NavigateUp();
-    }
-
-    // Refresh button.
-    Rect refreshR{rect.x + 36.0f, rect.y + 6.0f, 24.0f, 24.0f};
-    if (ui.Button(Slate::Context::ID("cb.refresh"), refreshR, "R")) {
+    // Reload button (re-scans the registry). Back/forward navigation now
+    // lives in the breadcrumb — clicking "Content" returns to root and
+    // each segment jumps back to its ancestor folder.
+    Rect reloadR{rect.x + 8.0f, rect.y + 6.0f, 24.0f, 24.0f};
+    if (m_texReload) {
+        if (ui.IconButton(Slate::Context::ID("cb.reload"), reloadR,
+                          m_texReload)) {
+            if (m_registry) m_registry->Scan();
+        }
+    } else if (ui.Button(Slate::Context::ID("cb.reload"), reloadR, "R")) {
         if (m_registry) m_registry->Scan();
     }
 
     // Search bar with embedded filter toggle.
-    // Layout: [Up][Refresh] [breadcrumb segments...] [search][toggle]
+    // Layout: [reload] [breadcrumb segments...] [search][toggle]
     // The toggle lives inside the bar's right edge and shows a down chevron
     // when the filter menu is closed / up chevron when open.
     constexpr f32 kBarH = 24.0f;
@@ -108,7 +110,7 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     f32 toggleX = barRight - kToggleW;
     // Keep the search bar a fixed, Unreal-style width (not the full
     // toolbar); right-align it against the filter toggle.
-    f32 barW = std::min(kBarMaxW, toggleX - (rect.x + 68.0f));
+    f32 barW = std::min(kBarMaxW, toggleX - (rect.x + 40.0f));
     if (barW < 140.0f) barW = 140.0f;
     f32 barX = toggleX - kSepW - barW;
     Rect barR{barX, rect.y + 6.0f, barW, kBarH};
@@ -157,7 +159,7 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     constexpr f32 kChevW = 16.0f;
     const Slate::Color kFolderOrange{255, 178, 92, 255};
     const Slate::Font& f = ui.uiFont();
-    f32 x = rect.x + 68.0f;
+    f32 x = rect.x + 40.0f;
     f32 bRight = barX - kBarGap;
     f32 yMid = rect.y + (rect.h - kSegH) * 0.5f;
 
