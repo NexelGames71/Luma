@@ -8,7 +8,11 @@ add_library(LumaCore STATIC
     src/Config/Config.cpp
     src/Event/Event.cpp
     src/Layer/LayerStack.cpp
-    src/Application/Application.cpp)
+    src/Application/Application.cpp
+    src/Memory/Alloc.cpp
+    src/Memory/Arena.cpp
+    src/Memory/Pool.cpp
+    src/Memory/Track.cpp)
 
 add_library(Luma::Core ALIAS LumaCore)
 

@@ -2,6 +2,7 @@
 
 #include "Luma/Core/Assert.h"
 #include "Luma/Core/Log.h"
+#include "Luma/Core/Memory.h"
 
 namespace Luma {
 
@@ -17,6 +18,12 @@ Application::Application(ApplicationSpec spec) : m_spec(std::move(spec)) {
 Application::~Application() {
     m_layerStack.Clear();
     s_instance = nullptr;
+    // Surface any memory leaks before the static globals are torn down.
+    // Always called; in Shipping the tracking layer is a no-op.
+    if (Luma::Memory::IsTrackingActive()) {
+        Luma::Memory::GlobalTracking().ReportLeaks();
+        Luma::Memory::GlobalTracking().ResetStats();
+    }
 }
 
 Layer* Application::PushLayer(std::unique_ptr<Layer> layer) {
