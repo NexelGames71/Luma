@@ -120,8 +120,12 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
 
     // Import button (round-rect pill with "Import" label + a 90-deg-CW
     // rotated green import icon). Sits between the reload icon and the
-    // breadcrumb box.
+    // breadcrumb box. The whole pill highlights on hover and depresses on
+    // press, both driven by Animate so the transitions are smooth (not
+    // instant).
     const Slate::Color kImportGreen = Slate::Color::RGB(76, 180, 120);
+    const Slate::Color kImportRest = t.surface3;
+    const Slate::Color kImportHover = kImportGreen;
     constexpr f32 kImportIconSide = 16.0f;
     constexpr f32 kImportPadX = 8.0f;
     const Slate::Font& uiF = ui.uiFont();
@@ -129,36 +133,56 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     f32 importW = kImportIconSide + 6.0f + importTextSize.x +
                   kImportPadX * 2.0f;
     Rect importR{rect.x + 40.0f, rect.y + 6.0f, importW, kBarH};
+    u64 importId = Slate::Context::ID("cb.import");
     {
         bool hover = importR.Contains(ui.mouse());
         if (hover) ui.RequestCursor(Luma::CursorShape::Hand);
         if (hover && ui.mousePressed(0)) m_importPressed = true;
+        bool pressed = m_importPressed && hover;
         bool clicked = false;
         if (ui.mouseReleased(0)) {
             if (m_importPressed && hover) clicked = true;
             m_importPressed = false;
         }
-        // Pill background: green-tinted when hovered, muted otherwise.
-        ui.PanelRounded(
-            importR, hover ? kImportGreen : t.surface3, t.radius.pill);
-        ui.PanelRoundedBordered(importR, t.outline, t.outline, t.radius.pill,
+        // Smooth hover fade (0..1) + press fade (0..1). Press darkens
+        // the fill slightly so it reads as a depression.
+        f32 hoverT = ui.Animate(importId ^ 0xBEEFCAFEull, hover,
+                                t.motion.hover);
+        f32 pressT = ui.Animate(importId ^ 0xFEEDFACEull, pressed,
+                                t.motion.press);
+        Slate::Color bg = Slate::Mix(kImportRest, kImportHover, hoverT);
+        bg = Slate::Darken(bg, 0.10f * pressT);
+        // Press kit subtly shrinks the pill inward (a "click" feel).
+        f32 shrink = 0.5f * pressT;
+        Rect drawR = importR.Inset(shrink, shrink);
+        ui.PanelRounded(drawR, bg, t.radius.pill);
+        ui.PanelRoundedBordered(drawR, Slate::Mix(t.outline, kImportGreen,
+                                                  0.6f * hoverT),
+                                t.outline, t.radius.pill,
                                 t.border.hairline);
-        // Rotated (90deg CW) green icon on the left of the pill.
-        f32 iconCx = importR.x + kImportPadX + kImportIconSide * 0.5f;
-        f32 iconCy = importR.y + importR.h * 0.5f;
+
+        // Rotated (90deg CW) green icon on the left of the pill; brighter
+        // as hover fades in.
+        f32 iconCx = drawR.x + kImportPadX + kImportIconSide * 0.5f;
+        f32 iconCy = drawR.y + drawR.h * 0.5f;
+        Slate::Color iconColor = Slate::Mix(kImportGreen,
+                                            Slate::Lighten(kImportGreen, 0.25f),
+                                            hoverT);
         if (m_texImport) {
             ui.drawList().AddImageRotated(
                 m_texImport, {iconCx, iconCy}, kImportIconSide * 0.5f,
                 1.5707963f,  // pi/2 = 90 deg CW (rotate the quad so the
                              // image reads rotated)
-                kImportGreen);
+                iconColor);
         }
-        // "Import" label to the right of the icon.
-        ui.LabelIn({importR.x + kImportPadX + kImportIconSide + 6.0f,
-                    importR.y + (importR.h - importTextSize.y) * 0.5f,
-                    importTextSize.x + 4.0f, importR.h},
-                   "Import",
-                   hover ? Slate::Color::RGB(20, 30, 24) : t.text,
+        // "Import" label to the right of the icon; dark on green-hover,
+        // normal text at rest.
+        Slate::Color labelRest = t.text;
+        Slate::Color labelHover = Slate::Color::RGB(20, 30, 24);
+        ui.LabelIn({drawR.x + kImportPadX + kImportIconSide + 6.0f,
+                    drawR.y + (drawR.h - importTextSize.y) * 0.5f,
+                    importTextSize.x + 4.0f, drawR.h},
+                   "Import", Slate::Mix(labelRest, labelHover, hoverT),
                    Align::Left);
         (void)clicked;
     }
