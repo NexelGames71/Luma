@@ -36,6 +36,31 @@ struct MeshRendererComponent {
     f32 roughness = 0.5f;
 };
 
+// A camera. Its position/orientation come from the entity's Transform; this
+// component supplies the projection. `primary` marks the camera the game view
+// renders through (the editor keeps its own separate fly camera).
+enum class ProjectionType { Perspective, Orthographic };
+
+struct CameraComponent {
+    ProjectionType projection = ProjectionType::Perspective;
+    f32 fovYDegrees = 60.0f;   // perspective vertical field of view
+    f32 orthoHeight = 10.0f;   // orthographic view height in world units
+    f32 nearZ = 0.1f;
+    f32 farZ = 1000.0f;
+    bool primary = true;
+
+    // Vulkan clip (0..1 depth, Y-flipped for perspective) — see Math::Perspective.
+    Math::Mat4 ProjectionMatrix(f32 aspect) const {
+        using namespace Math;
+        if (projection == ProjectionType::Orthographic) {
+            f32 h = orthoHeight * 0.5f;
+            f32 w = h * aspect;
+            return Ortho(-w, w, -h, h, nearZ, farZ);
+        }
+        return Perspective(Radians(fovYDegrees), aspect, nearZ, farZ);
+    }
+};
+
 // A punctual light source. Position comes from the entity's Transform; the aim
 // (spot/directional) comes from its rotation. The Environment already provides
 // the sun, so these are additional lights.

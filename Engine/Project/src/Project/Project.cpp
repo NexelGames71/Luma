@@ -89,7 +89,8 @@ std::optional<Project> Project::Create(const ProjectDesc& desc,
         return std::nullopt;
     }
 
-    for (const char* sub : {"", "Content", "Config", "Source", "Saved"}) {
+    for (const char* sub :
+         {"", "Content", "Content/Scenes", "Config", "Source", "Saved"}) {
         fs::create_directories(root / sub, ec);
         if (ec) {
             SetError(outError, "failed to create " + (root / sub).string() +
@@ -97,6 +98,10 @@ std::optional<Project> Project::Create(const ProjectDesc& desc,
             return std::nullopt;
         }
     }
+
+    // Default startup scene path, stored project-relative with forward slashes.
+    const std::string startupScene =
+        std::string("Content/Scenes/Main") + kSceneExtension;
 
     const std::string version = CurrentEngineVersionString();
     {
@@ -110,7 +115,7 @@ std::optional<Project> Project::Create(const ProjectDesc& desc,
             << "name = " << desc.name << "\n"
             << "engine_version = " << version << "\n"
             << "template = " << ToString(desc.gameTemplate) << "\n"
-            << "startup_scene = \n";
+            << "startup_scene = " << startupScene << "\n";
     }
 
     LUMA_LOG_INFO("Project", "created project '{}' ({}) at {}", desc.name,
@@ -139,6 +144,7 @@ std::optional<Project> Project::Load(const fs::path& lumaFile,
     project.m_engineVersion = config.GetString("Project.engine_version", "0.0.0");
     project.m_template = GameTemplateFromString(
         config.GetString("Project.template", "Empty"));
+    project.m_startupScene = config.GetString("Project.startup_scene", "");
 
     LUMA_LOG_INFO("Project", "loaded project '{}' (engine {}, template {})",
                   project.m_name, project.m_engineVersion,

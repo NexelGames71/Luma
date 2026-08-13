@@ -96,6 +96,36 @@ TEST_CASE("DiscoverProjects finds projects one level down", "[project]") {
     REQUIRE(found.size() == 2);
 }
 
+TEST_CASE("Project::Create sets up a Scenes dir and startup scene", "[project]") {
+    TempDir tmp;
+    Luma::ProjectDesc desc;
+    desc.name = "SceneGame";
+    desc.parentDirectory = tmp.path;
+
+    auto project = Luma::Project::Create(desc);
+    REQUIRE(project.has_value());
+
+    REQUIRE(fs::is_directory(project->ScenesDir()));
+    REQUIRE(project->ScenesDir() == project->ContentDir() / "Scenes");
+    REQUIRE_FALSE(project->StartupScene().empty());
+    // The startup scene resolves under the project's Scenes dir.
+    fs::path scenePath = project->StartupScenePath();
+    REQUIRE(scenePath.extension() == ".lscene");
+    REQUIRE(scenePath.parent_path() == project->ScenesDir());
+}
+
+TEST_CASE("Project::Load reads back the startup scene", "[project]") {
+    TempDir tmp;
+    Luma::ProjectDesc desc{"SceneLoad", tmp.path, Luma::GameTemplate::Empty};
+    auto created = Luma::Project::Create(desc);
+    REQUIRE(created.has_value());
+
+    auto loaded = Luma::Project::Load(created->ProjectFile());
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->StartupScene() == created->StartupScene());
+    REQUIRE_FALSE(loaded->StartupScene().empty());
+}
+
 TEST_CASE("Project name validation", "[project]") {
     REQUIRE(Luma::IsValidProjectName("Ancient Simulation"));
     REQUIRE(Luma::IsValidProjectName("MyGame"));

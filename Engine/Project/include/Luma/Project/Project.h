@@ -36,6 +36,7 @@ struct ProjectDesc {
 class Project {
 public:
     static constexpr const char* kExtension = ".luma";
+    static constexpr const char* kSceneExtension = ".lscene";
 
     const std::string& Name() const { return m_name; }
     GameTemplate Template() const { return m_template; }
@@ -47,6 +48,20 @@ public:
     std::filesystem::path ConfigDir() const { return RootDir() / "Config"; }
     std::filesystem::path SourceDir() const { return RootDir() / "Source"; }
     std::filesystem::path SavedDir() const { return RootDir() / "Saved"; }
+    std::filesystem::path ScenesDir() const { return ContentDir() / "Scenes"; }
+
+    // The startup scene, stored in the descriptor as a project-relative path
+    // (e.g. "Content/Scenes/Main.lscene"). May be empty on older projects.
+    const std::string& StartupScene() const { return m_startupScene; }
+
+    // Absolute path to the startup scene; falls back to Scenes/Main.lscene when
+    // the descriptor does not name one, so there is always a usable target.
+    std::filesystem::path StartupScenePath() const {
+        if (m_startupScene.empty()) {
+            return ScenesDir() / (std::string("Main") + kSceneExtension);
+        }
+        return RootDir() / m_startupScene;
+    }
 
     // Creates the project folder, standard subdirectories and the .luma file.
     // Returns the loaded project, or nullopt with *outError set on failure.
@@ -61,6 +76,7 @@ private:
     std::string m_name;
     GameTemplate m_template = GameTemplate::Empty;
     std::string m_engineVersion;
+    std::string m_startupScene;  // project-relative, e.g. Content/Scenes/Main.lscene
     std::filesystem::path m_projectFile;
 };
 
