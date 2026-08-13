@@ -1,13 +1,16 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include "Luma/Platform/Cursor.h"
 #include "Luma/RHI/Renderer.h"
 #include "Luma/Slate/DrawList.h"
 #include "Luma/Slate/Font.h"
+#include "Luma/Slate/IconKind.h"
 #include "Luma/Slate/Theme.h"
 #include "Luma/Slate/Types.h"
 
@@ -112,6 +115,53 @@ public:
     bool CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
                           bool& open);
 
+    // --- New widget catalog ------------------------------------------------
+    // Toggle (animated switch). Returns true if value changed.
+    bool Toggle(u64 id, const Rect& rect, bool& value);
+    // Slider with [min..max] range. Returns true if value changed.
+    bool Slider(u64 id, const Rect& rect, f32& value, f32 min, f32 max);
+    // Dropdown. Returns the new index (or `current` if unchanged / closed).
+    // `items` is a list of labels; `current` is the selected index. The popup
+    // opens on click, closes on selection or outside-click.
+    int Dropdown(u64 id, const Rect& rect,
+                 const std::vector<std::string>& items, int current);
+    // Hierarchical tree node. Returns true if the open state toggled.
+    bool TreeNode(u64 id, const Rect& rect, std::string_view label, Icon icon,
+                  bool& open, int depth = 0, bool selected = false);
+    // Inspector-style property row: label column on the left, returns the
+    // field rect on the right so the caller can place a control inside it.
+    // `labelWidth` is the label column width in px.
+    Rect PropertyRow(const Rect& rect, std::string_view label,
+                     f32 labelWidth = 120.0f);
+    // Input + search icon + clear-X when text is non-empty. Returns true if
+    // text changed (typing or clearing).
+    bool SearchBox(u64 id, const Rect& rect, std::string& text,
+                   std::string_view placeholder = "Search...");
+    // Modal popup menu. Returns the clicked item index, or -1 if dismissed.
+    // Closes on selection or outside-click; backdrop dims the rest of the UI.
+    struct MenuItem {
+        std::string label;
+        Icon icon = Icon::None;
+        bool enabled = true;
+        bool separatorAfter = false;
+    };
+    int MenuPopup(u64 id, const Rect& anchor,
+                  const std::vector<MenuItem>& items);
+    // Hover-delay tooltip. Shows `text` after kTooltipDelay frames of hover
+    // over `anchor`. Uses elevation shadow.
+    void Tooltip(const Rect& anchor, std::string_view text);
+    // Modal dialog. BeginModal centers `title`-bar window at given size and
+    // dims the rest of the UI; returns the content rect. EndModal closes.
+    // ModalButtonRow lays out OK / Cancel at the bottom (returns true for OK).
+    struct ModalResult { bool ok = false; bool cancel = false; bool open = true; };
+    Rect BeginModal(u64 id, std::string_view title, const Vec2& size);
+    void EndModal();
+    ModalResult ModalButtonRow(u64 id, const Rect& content,
+                               std::string_view okLabel = "OK",
+                               std::string_view cancelLabel = "Cancel");
+    // Progress bar (determinate). Optional centered text label.
+    void ProgressBar(const Rect& rect, f32 fraction, std::string_view text = {});
+
     // --- Docking primitives -------------------------------------------------
     // Splits `region` by `ratio` (0..1) with a draggable divider. Outputs the
     // two sub-regions; updates `ratio` while dragging. Returns true if dragging.
@@ -195,12 +245,23 @@ private:
     f32 m_displayW = 0.0f;
     f32 m_displayH = 0.0f;
 
+    // Popup / modal / tooltip state — only one of each open at a time so
+    // outside-clicks dismiss cleanly.
+    u64 m_openPopup = 0;       // id of the open MenuPopup / Dropdown
+    u64 m_openModal = 0;       // id of the open BeginModal
+    u64 m_tooltipAnchor = 0;   // id under tooltip hover-delay
+    u32 m_tooltipTouch = 0;    // frame the anchor was last seen
+    std::string m_tooltipText; // cached tooltip text
+    std::unordered_map<u64, bool> m_modalOk;
+    std::unordered_map<u64, bool> m_modalCancel;
+
     // Per-id animation values (0..1). Each entry tracks the value plus the
     // last frame it was touched so stale entries can be GC'd.
     struct AnimState { f32 value = 0.0f; u32 lastTouch = 0; };
     std::unordered_map<u64, AnimState> m_anim;
     u32 m_frame = 0;
-    static constexpr u32 kAnimGcAge = 120;  // evict after ~2s untouched
+    static constexpr u32 kAnimGcAge = 120;     // evict after ~2s untouched
+    static constexpr u32 kTooltipDelay = 30;   // ~0.5s at 60fps
 };
 
 }  // namespace Luma::Slate

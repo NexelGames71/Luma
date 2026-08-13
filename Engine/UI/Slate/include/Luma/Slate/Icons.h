@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Luma/Slate/Context.h"
+#include "Luma/Slate/IconKind.h"
 #include "Luma/Slate/Types.h"
 
 // Procedural icon set drawn with lines, tris, and circles (token-styled, DPI-
@@ -8,37 +9,6 @@
 // browser). Adding a new icon is a single enum + draw block in Icons.cpp.
 
 namespace Luma::Slate {
-
-enum class Icon {
-    None,
-    ChevronRight,
-    ChevronDown,
-    ChevronUp,
-    Search,
-    Gear,
-    Folder,
-    FolderOpen,
-    Eye,
-    EyeOff,
-    Lock,
-    Plus,
-    Close,
-    Check,
-    Save,
-    Play,
-    Pause,
-    Stop,
-    Grip,
-    Dot,
-    Trash,
-    Camera,
-    Light,
-    Cube,
-    Sphere,
-    Plane,
-    Cylinder,
-    Refresh,
-};
 
 class Context;
 

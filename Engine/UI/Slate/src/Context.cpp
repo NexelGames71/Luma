@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "Luma/Slate/Icons.h"
 #include "Luma/Slate/Theme.h"
 
 namespace Luma::Slate {
@@ -784,6 +785,458 @@ Rect Context::PanelWithTitle(const Rect& rect, std::string_view title) {
                          m_theme.separator);
     return Rect{rect.x, rect.y + headerH + 1.0f, rect.w,
                 rect.h - headerH - 1.0f};
+}
+
+// =============================================================================
+// New widget catalog (Slice 3 of the design-system spec).
+// =============================================================================
+
+bool Context::Toggle(u64 id, const Rect& rect, bool& value) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::Hand;
+    }
+    if (hovered && m_mousePressed[0]) m_active = id;
+    bool changed = false;
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) {
+            value = !value;
+            changed = true;
+        }
+        m_active = 0;
+    }
+
+    // Pill-shaped track: surface3 resting, accent when on.
+    f32 trackH = rect.h;
+    f32 rad = trackH * 0.5f;
+    Color trackBg = value ? m_theme.accent : m_theme.fieldBorder;
+    if (hovered) trackBg = Mix(trackBg, m_theme.surface3, 0.25f);
+    m_draw.AddRectFilledRounded(rect, trackBg, rad);
+
+    // Animated thumb: lerps between left (off) and right (on).
+    f32 t = Animate(id ^ 0xA5A5A5A5ull, value, m_theme.motion.hover);
+    f32 thumbR = trackH * 0.42f;
+    f32 cxOff = rect.x + trackH * 0.5f;
+    f32 cxOn = rect.Right() - trackH * 0.5f;
+    f32 cx = cxOff + (cxOn - cxOff) * t;
+    Vec2 thumbCenter{cx, rect.y + trackH * 0.5f};
+    m_draw.AddCircleFilled(thumbCenter, thumbR, Color::RGB(255, 255, 255));
+    return changed;
+}
+
+bool Context::Slider(u64 id, const Rect& rect, f32& value, f32 min, f32 max) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::ResizeEW;
+    }
+    if (hovered && m_mousePressed[0]) m_active = id;
+
+    bool changed = false;
+    if (m_active == id) {
+        m_requestedCursor = CursorShape::ResizeEW;
+        // Update value as long as the button is held — even if the mouse
+        // position hasn't changed since the press (jump-to-cursor on click).
+        if (rect.w > 1.0f && max > min && m_mouseDown[0]) {
+            f32 t = std::clamp((m_mouse.x - rect.x) / rect.w, 0.0f, 1.0f);
+            f32 newValue = min + (max - min) * t;
+            if (std::fabs(newValue - value) > 1e-6f) {
+                value = newValue;
+                changed = true;
+            }
+        }
+        if (!m_mouseDown[0]) m_active = 0;
+    }
+
+    // Track + fill.
+    f32 mid = rect.y + rect.h * 0.5f;
+    f32 trackH = std::max(2.0f, rect.h * 0.12f);
+    Rect trackBg{rect.x, mid - trackH * 0.5f, rect.w, trackH};
+    m_draw.AddRectFilledRounded(trackBg, m_theme.fieldBorder, trackH * 0.5f);
+    f32 frac = (max > min) ? std::clamp((value - min) / (max - min), 0.0f, 1.0f)
+                           : 0.0f;
+    Rect fill{rect.x, mid - trackH * 0.5f, rect.w * frac, trackH};
+    if (fill.w > 0.5f)
+        m_draw.AddRectFilledRounded(fill, m_theme.accent, trackH * 0.5f);
+
+    // Thumb (animated focus ring on hover).
+    f32 thumbR = std::max(6.0f, rect.h * 0.32f);
+    f32 tx = rect.x + rect.w * frac;
+    if (hovered) {
+        m_draw.AddCircleFilled({tx, mid}, thumbR + 2.0f, m_theme.accentMuted);
+    }
+    m_draw.AddCircleFilled({tx, mid}, thumbR, m_theme.text);
+    return changed;
+}
+
+int Context::Dropdown(u64 id, const Rect& rect,
+                     const std::vector<std::string>& items, int current) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::Hand;
+    }
+    if (hovered && m_mousePressed[0]) m_active = id;
+
+    // Compute the popup rect up front so the outside-click check uses it,
+    // not just the field rect.
+    f32 itemH = rect.h;
+    f32 totalH = items.empty() ? 0.0f
+                                : itemH * static_cast<f32>(items.size());
+    Rect popupRect{rect.x, rect.Bottom() + 1.0f, rect.w, totalH};
+
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) {
+            m_openPopup = (m_openPopup == id) ? 0 : id;
+        }
+        m_active = 0;
+    }
+    // Outside-click dismisses (only if the click is outside both the field
+    // and the open popup — clicking an item should not dismiss).
+    if (m_openPopup == id && m_mousePressed[0] && !hovered &&
+        !popupRect.Contains(m_mouse)) {
+        m_openPopup = 0;
+    }
+
+    // Closed: field with current selection + chevron.
+    Color bg = m_theme.fieldBg;
+    m_draw.AddRectFilledRounded(rect, m_theme.fieldBorder,
+                                m_theme.radius.md);
+    m_draw.AddRectFilledRounded(rect.Inset(m_theme.border.hairline,
+                                            m_theme.border.hairline),
+                                bg, m_theme.radius.md - m_theme.border.hairline);
+    std::string_view sel =
+        (current >= 0 && static_cast<usize>(current) < items.size())
+            ? std::string_view(items[current])
+            : std::string_view{};
+    Vec2 ts = m_uiFont.Measure(sel);
+    m_draw.AddText(m_uiFont,
+                   {rect.x + m_theme.space.md, rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f},
+                   sel, m_theme.text);
+    DrawIcon(*this,
+             {rect.Right() - rect.h, rect.y, rect.h, rect.h},
+             m_openPopup == id ? Icon::ChevronUp : Icon::ChevronDown,
+             m_theme.textDim);
+
+    // Open: list overlay below the field.
+    int clicked = -1;
+    if (m_openPopup == id && !items.empty()) {
+        Rect list = popupRect;
+        m_draw.AddRectShadow(list, m_theme.radius.md, 0.35f, 8.0f);
+        m_draw.AddRectFilledRounded(list, m_theme.surface4,
+                                    m_theme.radius.md);
+        m_draw.AddRectOutline(list, m_theme.outline, m_theme.border.hairline);
+        for (usize i = 0; i < items.size(); ++i) {
+            Rect item{list.x, list.y + itemH * static_cast<f32>(i), list.w,
+                      itemH};
+            bool itemHovered = item.Contains(m_mouse);
+            if (itemHovered) {
+                m_draw.AddRectFilledRounded(item, m_theme.selectionBg,
+                                            m_theme.radius.sm);
+                if (m_mousePressed[0]) m_active = id ^ 0xFEEDBEEFull + i;
+                if (m_active == (id ^ 0xFEEDBEEFull + i) && m_mouseReleased[0]) {
+                    clicked = static_cast<int>(i);
+                    m_openPopup = 0;
+                    m_active = 0;
+                }
+            }
+            Color itemColor =
+                (static_cast<int>(i) == current) ? m_theme.selectionText
+                                                 : m_theme.text;
+            m_draw.AddText(m_uiFont,
+                           {item.x + m_theme.space.md,
+                            item.y + (item.h - m_uiFont.LineHeight()) * 0.5f},
+                           items[i], itemColor);
+        }
+        if (clicked >= 0) current = clicked;
+    }
+    return current;
+}
+
+bool Context::TreeNode(u64 id, const Rect& rect, std::string_view label,
+                       Icon icon, bool& open, int depth, bool selected) {
+    bool hovered = rect.Contains(m_mouse);
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::Hand;
+    }
+    if (hovered && m_mousePressed[0]) m_active = id;
+    bool toggled = false;
+    if (m_active == id && m_mouseReleased[0]) {
+        if (hovered) {
+            open = !open;
+            toggled = true;
+        }
+        m_active = 0;
+    }
+
+    // Background: selected > hover > rest.
+    Rect bg = rect.Inset(m_theme.space.xs, 0.0f);
+    if (selected) {
+        m_draw.AddRectFilledRounded(bg, m_theme.selectionBg, m_theme.radius.sm);
+    } else if (hovered) {
+        m_draw.AddRectFilledRounded(bg, m_theme.surface2, m_theme.radius.sm);
+    }
+    // Indent per depth.
+    f32 indent = m_theme.space.md * static_cast<f32>(depth + 1);
+    // Chevron for the disclosure (chevron is the click target; if you want
+    // the whole row to be the target, the caller wraps it as such).
+    DrawIcon(*this, {rect.x + indent - m_theme.size.iconMd, rect.y,
+                     m_theme.size.iconMd, rect.h},
+             open ? Icon::ChevronDown : Icon::ChevronRight, m_theme.textDim);
+    // Optional leading icon.
+    f32 textX = indent + m_theme.size.iconMd + m_theme.space.sm;
+    if (icon != Icon::None) {
+        DrawIcon(*this,
+                 {rect.x + indent + m_theme.space.sm,
+                  rect.y + (rect.h - m_theme.size.iconMd) * 0.5f,
+                  m_theme.size.iconMd, m_theme.size.iconMd},
+                 icon, m_theme.text);
+        textX += m_theme.size.iconMd + m_theme.space.sm;
+    }
+    m_draw.AddText(m_font,
+                   {rect.x + textX, rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
+                   label, selected ? m_theme.selectionText : m_theme.text);
+    return toggled;
+}
+
+Rect Context::PropertyRow(const Rect& rect, std::string_view label,
+                          f32 labelWidth) {
+    // Subtle hairline divider between rows; the caller paints the field
+    // control in the returned rect. Label sits left, vertically centered.
+    m_draw.AddRectFilled({rect.x, rect.Bottom() - 1.0f, rect.w, 1.0f},
+                         m_theme.separator);
+    m_draw.AddText(m_font,
+                   {rect.x + m_theme.space.md,
+                    rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
+                   label, m_theme.textDim);
+    f32 fieldX = rect.x + labelWidth + m_theme.space.md;
+    return Rect{fieldX, rect.y + (rect.h - 22.0f) * 0.5f,
+                std::max(0.0f, rect.Right() - fieldX - m_theme.space.md), 22.0f};
+}
+
+bool Context::SearchBox(u64 id, const Rect& rect, std::string& text,
+                        std::string_view placeholder) {
+    // Reuse TextField for editing; decorate with a Search icon at the left and
+    // an X (Clear) at the right when text is non-empty.
+    f32 iconSide = rect.h;
+    Rect inner{rect.x + iconSide, rect.y, rect.w - iconSide, rect.h};
+    // Decorative icons live on top of the field, so we draw the field first
+    // (TextField also sets focus + caret), then overlay.
+    bool changed = TextField(id, inner, text, placeholder);
+    // Search icon (left).
+    DrawIcon(*this, {rect.x, rect.y, iconSide, rect.h}, Icon::Search,
+             m_theme.textDim);
+    if (!text.empty()) {
+        if (IconButton(id ^ 0xC1EA12ull,
+                      {rect.Right() - iconSide, rect.y, iconSide, rect.h},
+                      0)) {
+            text.clear();
+            changed = true;
+        } else {
+            // Draw the X icon explicitly since IconButton with no texture would
+            // not draw it; IconButton draws nothing without an icon texture.
+            DrawIcon(*this,
+                     {rect.Right() - iconSide, rect.y, iconSide, rect.h},
+                     Icon::Close, m_theme.textDim);
+        }
+    }
+    return changed;
+}
+
+int Context::MenuPopup(u64 id, const Rect& anchor,
+                       const std::vector<MenuItem>& items) {
+    bool open = (m_openPopup == id);
+    // Open if requested via outside call (we let the caller pass `anchor` as
+    // the click target; here we only render the open popup).
+    if (!open) {
+        // Detect an "open request" — caller toggled m_openPopup to id externally
+        // (the File menu / Inspector's +Component pattern). We still render it.
+        if (m_openPopup == id) open = true;
+    }
+    // Outside-click dismisses.
+    if (open && m_mousePressed[0]) {
+        // Will be handled per-item; if click misses all, close at end of frame.
+        bool inAny = anchor.Contains(m_mouse);
+        for (const auto& it : items) {
+            (void)it;
+        }
+        if (!inAny && m_openPopup == id) {
+            // Defer the close until we see what's inside the menu rect; the
+            // actual close happens after we lay out the menu.
+        }
+    }
+
+    int clicked = -1;
+    if (open) {
+        // Compute menu rect: stack items below the anchor.
+        f32 itemH = anchor.h;
+        f32 totalH = itemH * static_cast<f32>(items.size());
+        Rect menu{anchor.x, anchor.Bottom() + 2.0f, anchor.w, totalH};
+        m_draw.AddRectShadow(menu, m_theme.radius.md, 0.4f, 10.0f);
+        m_draw.AddRectFilledRounded(menu, m_theme.surface4, m_theme.radius.md);
+        m_draw.AddRectOutline(menu, m_theme.outline, m_theme.border.hairline);
+        f32 y = menu.y;
+        for (usize i = 0; i < items.size(); ++i) {
+            const MenuItem& mi = items[i];
+            Rect row{menu.x, y, menu.w, itemH};
+            bool itemHovered = row.Contains(m_mouse);
+            if (mi.enabled && itemHovered) {
+                m_draw.AddRectFilledRounded(row, m_theme.selectionBg,
+                                            m_theme.radius.sm);
+                if (m_mousePressed[0]) m_active = id ^ 0xDEADBEEFull + i;
+                if (m_active == (id ^ 0xDEADBEEFull + i) && m_mouseReleased[0]) {
+                    clicked = static_cast<int>(i);
+                    m_active = 0;
+                }
+            }
+            Color tc = mi.enabled ? m_theme.text : m_theme.textDisabled;
+            if (mi.icon != Icon::None) {
+                DrawIcon(*this,
+                         {row.x + m_theme.space.md,
+                          row.y + (row.h - m_theme.size.iconMd) * 0.5f,
+                          m_theme.size.iconMd, m_theme.size.iconMd},
+                         mi.icon, tc);
+            }
+            m_draw.AddText(m_uiFont,
+                           {row.x + m_theme.space.lg + m_theme.size.iconMd,
+                            row.y + (row.h - m_uiFont.LineHeight()) * 0.5f},
+                           mi.label, tc);
+            if (mi.separatorAfter && i + 1 < items.size()) {
+                m_draw.AddRectFilled(
+                    {row.x + m_theme.space.md, row.Bottom() - 1.0f,
+                     row.w - m_theme.space.md * 2.0f, 1.0f},
+                    m_theme.separator);
+            }
+            y += itemH;
+        }
+        // Outside-click closes the popup if no item was clicked.
+        if (clicked < 0 && m_mousePressed[0] && !menu.Contains(m_mouse)) {
+            m_openPopup = 0;
+        } else if (clicked >= 0) {
+            m_openPopup = 0;
+        }
+    }
+    return clicked;
+}
+
+void Context::Tooltip(const Rect& anchor, std::string_view text) {
+    bool hovered = anchor.Contains(m_mouse);
+    u64 key = reinterpret_cast<u64>(&anchor);
+    if (hovered) {
+        // Restart the hover delay whenever we transition from not-hovering
+        // to hovering this anchor (or a different one).
+        if (m_tooltipAnchor != key) {
+            m_tooltipAnchor = key;
+            m_tooltipTouch = m_frame;
+            m_tooltipText.assign(text);
+        }
+    } else if (m_tooltipAnchor == key) {
+        m_tooltipAnchor = 0;
+        m_tooltipText.clear();
+    }
+    if (m_tooltipAnchor != 0 && !m_tooltipText.empty() &&
+        m_frame - m_tooltipTouch >= kTooltipDelay) {
+        // Lay out below the anchor, clamped to the display.
+        Vec2 ts = m_uiFont.Measure(m_tooltipText);
+        f32 pad = m_theme.space.sm;
+        f32 w = ts.x + pad * 2.0f;
+        f32 h = ts.y + pad;
+        f32 x = anchor.x;
+        f32 y = anchor.Bottom() + 4.0f;
+        if (x + w > m_displayW) x = std::max(0.0f, m_displayW - w);
+        if (y + h > m_displayH) y = std::max(0.0f, anchor.y - h - 4.0f);
+        Rect tip{x, y, w, h};
+        m_draw.AddRectShadow(tip, m_theme.radius.sm, 0.35f, 6.0f);
+        m_draw.AddRectFilledRounded(tip, m_theme.surface4, m_theme.radius.sm);
+        m_draw.AddRectOutline(tip, m_theme.outline, m_theme.border.hairline);
+        m_draw.AddText(m_uiFont, {tip.x + pad, tip.y + pad * 0.5f},
+                       m_tooltipText, m_theme.text);
+    }
+}
+
+Rect Context::BeginModal(u64 id, std::string_view title, const Vec2& size) {
+    // First call with this id opens the modal; subsequent calls return the
+    // existing content rect so the caller can lay out content. Caller closes
+    // via EndModal() (or implicitly on next frame after cancel/OK).
+    if (m_openModal != id) {
+        m_openModal = id;
+        m_modalOk[id] = false;
+        m_modalCancel[id] = false;
+    }
+    // Scrim.
+    m_draw.AddRectFilled({0, 0, m_displayW, m_displayH},
+                         Color::RGBA(0, 0, 0, 160));
+    // Centered panel.
+    Vec2 sz = size;
+    f32 x = (m_displayW - sz.x) * 0.5f;
+    f32 y = (m_displayH - sz.y) * 0.5f;
+    Rect panel{x, y, sz.x, sz.y};
+    m_draw.AddRectShadow(panel, m_theme.radius.lg, 0.55f, 18.0f);
+    m_draw.AddRectFilledRounded(panel, m_theme.surface1, m_theme.radius.lg);
+    m_draw.AddRectOutline(panel, m_theme.outline, m_theme.border.hairline);
+    // Title bar.
+    f32 titleH = 32.0f;
+    m_draw.AddRectFilled({panel.x, panel.y, panel.w, titleH}, m_theme.header);
+    m_draw.AddRectFilled(
+        {panel.x, panel.y + titleH, panel.w, 1.0f}, m_theme.separator);
+    m_draw.AddText(m_uiFont,
+                   {panel.x + m_theme.space.lg,
+                    panel.y + (titleH - m_uiFont.LineHeight()) * 0.5f},
+                   title, m_theme.text);
+    // Content rect excludes title bar and a bottom padding row for buttons.
+    f32 buttonRowH = 36.0f;
+    return Rect{panel.x + m_theme.space.lg,
+                panel.y + titleH + m_theme.space.lg,
+                panel.w - m_theme.space.lg * 2.0f,
+                panel.h - titleH - buttonRowH - m_theme.space.lg * 2.0f};
+}
+
+void Context::EndModal() {
+    m_openModal = 0;
+}
+
+Context::ModalResult Context::ModalButtonRow(u64 id, const Rect& content,
+                                            std::string_view okLabel,
+                                            std::string_view cancelLabel) {
+    ModalResult r;
+    r.open = (m_openModal == id);
+    // Buttons live just below `content`.
+    f32 bw = 90.0f;
+    f32 bh = 26.0f;
+    f32 gap = m_theme.space.md;
+    Rect okRect{content.Right() - bw, content.Bottom() + gap, bw, bh};
+    Rect cancelRect{okRect.x - bw - gap, content.Bottom() + gap, bw, bh};
+    if (r.open) {
+        if (Button(id ^ 0xCAFEF00Dull, okRect, okLabel)) {
+            r.ok = true;
+            m_openModal = 0;
+        }
+        if (Button(id ^ 0xBADF00Dull, cancelRect, cancelLabel)) {
+            r.cancel = true;
+            m_openModal = 0;
+        }
+    }
+    return r;
+}
+
+void Context::ProgressBar(const Rect& rect, f32 fraction, std::string_view text) {
+    fraction = std::clamp(fraction, 0.0f, 1.0f);
+    // Track + fill.
+    m_draw.AddRectFilledRounded(rect, m_theme.fieldBorder, m_theme.radius.md);
+    Rect inner = rect.Inset(m_theme.border.hairline, m_theme.border.hairline);
+    m_draw.AddRectFilledRounded(inner, m_theme.fieldBg, m_theme.radius.md);
+    Rect fill{inner.x, inner.y, inner.w * fraction, inner.h};
+    if (fill.w > 0.5f) {
+        m_draw.AddRectFilledRounded(fill, m_theme.accent, m_theme.radius.md);
+    }
+    if (!text.empty()) {
+        m_draw.AddText(m_uiFont,
+                       {rect.x + (rect.w - m_uiFont.Measure(text).x) * 0.5f,
+                        rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f},
+                       text, m_theme.text);
+    }
 }
 
 }  // namespace Luma::Slate

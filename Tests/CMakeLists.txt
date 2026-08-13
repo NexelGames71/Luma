@@ -18,6 +18,9 @@ add_executable(LumaTests
     Scene/CameraComponentTests.cpp
     Math/MathTests.cpp
     Slate/ThemeTests.cpp
+    Slate/DrawListTests.cpp
+    Slate/IconTests.cpp
+    Slate/WidgetTests.cpp
     VFS/PathTests.cpp
     VFS/VFSTests.cpp
     VFS/FileWatcherTests.cpp)
