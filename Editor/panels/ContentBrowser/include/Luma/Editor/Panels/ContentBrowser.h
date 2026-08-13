@@ -13,8 +13,10 @@
 #include "Luma/Slate/Types.h"
 
 // Content Browser panel — two-pane asset explorer wired to a Luma::AssetRegistry.
-// Left pane: directory tree. Right pane: filtered grid + name list of the
-// currently selected folder's assets. Search + type chips at top. The panel
+// Left pane: directory tree. Right pane: filtered grid of the currently
+// selected folder's assets. Toolbar holds a search field whose right edge
+// carries a down/up chevron that toggles a type-filter drop-down (Mesh / 3D
+// model, Material, Texture, Scene, Shaders, Audios, plus All). The panel
 // owns navigation state (current folder, name filter, type filter) and
 // reports the user's currently-selected asset via a callback on PanelContext.
 //
@@ -65,13 +67,15 @@ private:
     std::string m_nameFilter;
     std::optional<AssetType> m_typeFilter;  // nullopt = all
     AssetId m_selected{};
-    bool m_showCreateMenu = false;
 
-    // Per-type sort direction (true = ascending, false = descending). Drives
-    // the small Up/Down arrow buttons in the toolbar's right side.
-    bool m_sortAscending = true;
+    // Filter drop-down state: true while the popup listing asset-type
+    // filters is open. Toggled by the down/up chevron button inside the
+    // search bar; dismissed by selection or outside-click.
+    bool m_filterMenuOpen = false;
 
-    // Loaded textures supplied by EditorScreen; 0 = not loaded.
+    // Loaded textures supplied by EditorScreen; 0 = not loaded. The sort
+    // up/down PNGs are kept for API stability but the toolbar chevron is
+    // drawn with procedural icons (crisp at any DPI).
     Luma::TextureHandle m_texSortUp = 0;
     Luma::TextureHandle m_texSortDown = 0;
     Luma::TextureHandle m_texSearchGlass = 0;
@@ -92,7 +96,10 @@ private:
                       PanelContext& ctx);
     void DrawGridPane(Slate::Context& ui, const Slate::Rect& rect,
                       PanelContext& ctx);
-    void DrawTypeChips(Slate::Context& ui, const Slate::Rect& rect);
+    // Draws the type-filter drop-down below `anchor`. No-op when
+    // m_filterMenuOpen is false; handles outside-click to close and
+    // updates m_typeFilter on selection.
+    void DrawFilterMenu(Slate::Context& ui, const Slate::Rect& anchor);
 
     // Returns the entries the right pane should currently show, applying
     // name + type + folder filters via the registry.

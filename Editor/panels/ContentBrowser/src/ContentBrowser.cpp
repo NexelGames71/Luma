@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <sstream>
 
 #include "Luma/Slate/Icons.h"
@@ -94,88 +95,147 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
         if (m_registry) m_registry->Scan();
     }
 
-    // Type chips: a row of toggles for filtering by AssetType.
-    f32 chipX = rect.x + 80.0f;
-    f32 chipY = rect.y + 6.0f;
-    f32 chipH = 24.0f;
-    auto drawChip = [&](u64 id, const char* label, AssetType type,
-                        f32 width) {
-        Rect chip{chipX, chipY, width, chipH};
-        bool active =
-            (!m_typeFilter.has_value() && type == AssetType::Unknown) ||
-            (m_typeFilter.has_value() && m_typeFilter.value() == type);
-        if (ui.Tab(id, chip, label, active)) {
-            if (type == AssetType::Unknown) m_typeFilter.reset();
-            else m_typeFilter = type;
-        }
-        chipX += width + 4.0f;
-    };
-    const Slate::Font& f = ui.uiFont();
-    drawChip(Slate::Context::ID("cb.t.all"), "All", AssetType::Unknown,
-             f.Measure("All").x + 18.0f);
-    drawChip(Slate::Context::ID("cb.t.tex"), "Tex", AssetType::Texture,
-             f.Measure("Tex").x + 18.0f);
-    drawChip(Slate::Context::ID("cb.t.mesh"), "Mesh", AssetType::Mesh,
-             f.Measure("Mesh").x + 18.0f);
-    drawChip(Slate::Context::ID("cb.t.mat"), "Mat", AssetType::Material,
-             f.Measure("Mat").x + 18.0f);
-    drawChip(Slate::Context::ID("cb.t.sh"), "Shd", AssetType::Shader,
-             f.Measure("Shd").x + 18.0f);
-    drawChip(Slate::Context::ID("cb.t.scn"), "Scn", AssetType::Scene,
-             f.Measure("Scn").x + 18.0f);
-    drawChip(Slate::Context::ID("cb.t.snd"), "Snd", AssetType::Sound,
-             f.Measure("Snd").x + 18.0f);
-    (void)f;
+    // Search bar with embedded filter toggle.
+    // Layout: [search-glass | text-field (with clear-X) || toggle ]
+    // The toggle lives inside the bar's right edge and shows a down chevron
+    // when the filter menu is closed / up chevron when open.
+    constexpr f32 kBarH = 24.0f;
+    constexpr f32 kToggleW = 26.0f;
+    constexpr f32 kSepW = 1.0f;
+    constexpr f32 kGap = 8.0f;
+    f32 barRight = rect.Right() - 8.0f;
+    f32 toggleX = barRight - kToggleW;
+    f32 barW = std::max(160.0f, toggleX - (rect.x + 68.0f) - kGap);
+    if (barW < 140.0f) barW = 140.0f;
+    f32 barX = toggleX - kSepW - barW;
+    Rect barR{barX, rect.y + 6.0f, barW, kBarH};
+    Rect textR{barR.x, barR.y, barR.w - kToggleW - kSepW, barR.h};
+    Rect toggleR{toggleX, barR.y, kToggleW, barR.h};
+    Rect sepR{textR.Right(), barR.y, kSepW, barR.h};
 
-    // Sort arrows: visible on the right of the search box when a sortable
-    // type is active. Clicking either toggles sort direction. Only the
-    // types listed in the brief are sortable (Texture/Mesh/Material/
-    // Shader/Scene/Sound); other types fall back to ascending.
-    bool sortable = m_typeFilter.has_value() &&
-                    (m_typeFilter.value() == AssetType::Texture ||
-                     m_typeFilter.value() == AssetType::Mesh ||
-                     m_typeFilter.value() == AssetType::Material ||
-                     m_typeFilter.value() == AssetType::Shader ||
-                     m_typeFilter.value() == AssetType::Scene ||
-                     m_typeFilter.value() == AssetType::Sound);
-    constexpr f32 kArrowSize = 22.0f;
-    f32 arrowGap = 4.0f;
-    f32 rightEdge = rect.Right() - 8.0f;
-    Rect upArrowR{}, downArrowR{};
-    bool arrowHoverUp = false, arrowHoverDown = false;
-    if (sortable) {
-        upArrowR = Rect{rightEdge - kArrowSize, rect.y + 7.0f, kArrowSize,
-                        kArrowSize};
-        downArrowR = Rect{upArrowR.x - kArrowSize - arrowGap, rect.y + 7.0f,
-                          kArrowSize, kArrowSize};
-        // Background pills for the arrows so they read as buttons.
-        ui.PanelRoundedBordered(upArrowR, m_sortAscending ? t.accentMuted
-                                                          : t.surface3,
-                                t.outline, t.radius.sm, t.border.hairline);
-        ui.PanelRoundedBordered(downArrowR, m_sortAscending ? t.surface3
-                                                            : t.accentMuted,
-                                t.outline, t.radius.sm, t.border.hairline);
-        // The two buttons share a hit zone with each pill (so we treat them
-        // as two distinct selectable rows the panel can detect).
-        if (ui.Selectable(Slate::Context::ID("cb.sort.up"), upArrowR, "",
-                          m_sortAscending, Icon::ChevronUp)) {
-            m_sortAscending = true;
-        }
-        if (ui.Selectable(Slate::Context::ID("cb.sort.down"), downArrowR, "",
-                          !m_sortAscending, Icon::ChevronDown)) {
-            m_sortAscending = false;
-        }
-        rightEdge = downArrowR.x - arrowGap;
+    // The search box reuses the available text rect; its field background
+    // covers textR, the leading icon sits at the left of textR, and its
+    // built-in clear-X sits at the right of textR (just left of the
+    // separator) — none of these overlap the filter toggle zone.
+    ui.SearchBox(Slate::Context::ID("cb.search"), textR, m_nameFilter,
+                 m_texSearchGlass, "Search assets...");
+
+    // Visual separator between the text field and the filter toggle so
+    // they read as distinct zones inside the same bar.
+    ui.Panel(sepR, t.separator);
+
+    // Filter toggle button — click toggles the type-filter drop-down.
+    // Uses procedural chevron icons (crisp at DPI) tinted with textDim at
+    // rest, brighter on hover.
+    bool toggleHover = toggleR.Contains(ui.mouse());
+    if (toggleHover) {
+        ui.PanelRoundedBordered(toggleR.Inset(2.0f, 2.0f), t.surface3, t.outline,
+                                t.radius.sm, t.border.hairline);
+    }
+    if (ui.Selectable(Slate::Context::ID("cb.filter.toggle"), toggleR, "",
+                      m_filterMenuOpen, Icon::None)) {
+        m_filterMenuOpen = !m_filterMenuOpen;
+    }
+    // Draw the chevron on top (icon-only button).
+    Slate::Icon chev = m_filterMenuOpen ? Slate::Icon::ChevronUp
+                                       : Slate::Icon::ChevronDown;
+    Slate::DrawIcon(ui,
+                    {toggleR.x + (kToggleW - 12.0f) * 0.5f,
+                     toggleR.y + (kBarH - 12.0f) * 0.5f, 12.0f, 12.0f},
+                    chev, toggleHover ? t.text : t.textDim);
+
+    // Drop-down: drawn after the toolbar so it sits on top of the body.
+    if (m_filterMenuOpen) {
+        DrawFilterMenu(ui, toggleR);
+    }
+}
+
+void ContentBrowserPanel::DrawFilterMenu(Slate::Context& ui,
+                                        const Slate::Rect& anchor) {
+    Slate::Theme& t = ui.theme();
+
+    // Items: All clears the filter; the rest pick a single AssetType. The
+    // order mirrors the brief (Mesh / 3D model, Material, Texture, Scene,
+    // Shaders, Audios) with All first so it's a one-click reset.
+    struct Item {
+        const char* label;
+        std::optional<AssetType> type;  // nullopt = All
+        Slate::Icon icon;
+    };
+    const Item kItems[] = {
+        {"All", std::nullopt, Slate::Icon::Dot},
+        {"Mesh (3D model)", AssetType::Mesh, Slate::Icon::Cube},
+        {"Material", AssetType::Material, Slate::Icon::Sphere},
+        {"Texture", AssetType::Texture, Slate::Icon::Image},
+        {"Scene", AssetType::Scene, Slate::Icon::Plane},
+        {"Shaders", AssetType::Shader, Slate::Icon::Plane},
+        {"Audios", AssetType::Sound, Slate::Icon::Play},
+    };
+
+    // Layout: anchor-width menu below the toggle, each row the same height
+    // as the search bar so the rows feel like the bar's siblings.
+    constexpr f32 kMenuRowH = 24.0f;
+    constexpr f32 kPadX = 10.0f;
+    const Slate::Font& f = ui.uiFont();
+    f32 maxW = anchor.w;
+    for (const Item& it : kItems) {
+        f32 w = f.Measure(it.label).x + kPadX * 2.0f + 24.0f;  // icon+check
+        if (w > maxW) maxW = w;
+    }
+    f32 menuW = std::max(maxW, anchor.w);
+    f32 menuH = kMenuRowH * static_cast<f32>(std::size(kItems));
+    Rect menuR{anchor.x + anchor.w - menuW,
+               anchor.Bottom() + 2.0f, menuW, menuH};
+
+    // Outside-click dismisses (press outside both the menu and the toggle
+    // that opened it).
+    if (ui.mousePressed(0) && !menuR.Contains(ui.mouse()) &&
+        !anchor.Contains(ui.mouse())) {
+        m_filterMenuOpen = false;
     }
 
-    // Search box on the right of the toolbar, ending before the arrows.
-    f32 searchW = std::min(260.0f, rightEdge - (rect.x + 76.0f));
-    if (searchW < 100.0f) searchW = 100.0f;
-    Rect searchR{rightEdge - searchW, rect.y + 6.0f, searchW, 24.0f};
-    ui.SearchBox(Slate::Context::ID("cb.search"), searchR, m_nameFilter,
-                 m_texSearchGlass, "Search assets...");
-    (void)arrowHoverUp;
-    (void)arrowHoverDown;
+    // Popup panel: rounded fill + outline (no shadow — the public Context
+    // API doesn't expose the shadow draw call, and the surface contrast
+    // against the toolbar is enough separation).
+    ui.PanelRoundedBordered(menuR, t.surface4, t.outline, t.radius.md,
+                            t.border.hairline);
+
+    for (usize i = 0; i < std::size(kItems); ++i) {
+        const Item& it = kItems[i];
+        Rect row{menuR.x, menuR.y + kMenuRowH * static_cast<f32>(i),
+                 menuR.w, kMenuRowH};
+        bool isActive =
+            (!m_typeFilter.has_value() && !it.type.has_value()) ||
+            (m_typeFilter.has_value() && it.type.has_value() &&
+             m_typeFilter.value() == it.type.value());
+        // Selectable handles hover fill + click detection. We pass the
+        // selected state for the active row's emphasis and draw the
+        // checkmark / icon / label on top.
+        u64 rowId = Slate::Context::ID("cb.filter.item") ^ static_cast<u64>(i);
+        if (ui.Selectable(rowId, row, "", isActive, Slate::Icon::None)) {
+            m_typeFilter = it.type;
+            m_filterMenuOpen = false;
+        }
+        // Checkmark (left) for the active row.
+        if (isActive) {
+            Slate::DrawIcon(ui,
+                            {row.x + 8.0f, row.y + (kMenuRowH - 12.0f) * 0.5f,
+                             12.0f, 12.0f},
+                            Slate::Icon::Check, t.selectionText);
+        }
+        // Leading icon (asset type glyph).
+        Slate::DrawIcon(ui,
+                        {row.x + 24.0f, row.y + (kMenuRowH - 14.0f) * 0.5f,
+                         14.0f, 14.0f},
+                        it.icon, isActive ? t.selectionText : t.text);
+        // Label.
+        Vec2 ts = f.Measure(it.label);
+        ui.LabelIn({row.x + 44.0f, row.y + (kMenuRowH - ts.y) * 0.5f,
+                    row.w - 52.0f, kMenuRowH},
+                   it.label,
+                   isActive ? t.selectionText : t.text,
+                   Slate::Align::Left);
+    }
 }
 
 void ContentBrowserPanel::DrawBreadcrumb(Slate::Context& ui,
@@ -184,47 +244,88 @@ void ContentBrowserPanel::DrawBreadcrumb(Slate::Context& ui,
     ui.Panel(rect, t.surface1);
     ui.Panel({rect.x, rect.Bottom() - 1.0f, rect.w, 1.0f}, t.separator);
 
-    f32 x = rect.x + 8.0f;
-    auto labelWidth = [&](std::string_view s) {
-        return ui.uiFont().Measure(s).x + 14.0f;
+    // Unreal-style breadcrumb:
+    //   [folder] Content  >  SubFolder  >  Leaf
+    // Each segment is a clickable button (returns to that folder); the
+    // final segment is the current folder and is rendered in textDim to
+    // read as the trail's terminus.
+    constexpr f32 kSegH = 20.0f;
+    constexpr f32 kSegPadX = 8.0f;
+    constexpr f32 kIconSize = 14.0f;
+    constexpr f32 kIconGap = 4.0f;
+    constexpr f32 kSepW = 16.0f;
+    const Slate::Color kFolderOrange{255, 178, 92, 255};
+    const Slate::Font& f = ui.uiFont();
+    f32 x = rect.x + 10.0f;
+    f32 yMid = rect.y + (rect.h - kSegH) * 0.5f;
+
+    auto drawFolder = [&](f32 xPos) {
+        if (m_texFolder) {
+            ui.Image(m_texFolder,
+                     {xPos, yMid + (kSegH - kIconSize) * 0.5f, kIconSize,
+                      kIconSize},
+                     kFolderOrange);
+        } else {
+            Slate::DrawIcon(ui,
+                            {xPos, yMid + (kSegH - kIconSize) * 0.5f,
+                             kIconSize, kIconSize},
+                            Icon::Folder, kFolderOrange);
+        }
+    };
+    auto drawChevron = [&](f32 xPos) {
+        Slate::DrawIcon(ui,
+                        {xPos, yMid + (kSegH - 10.0f) * 0.5f, 10.0f, 10.0f},
+                        Icon::ChevronRight, t.textDisabled);
+    };
+    auto drawSegment = [&](u64 id, const char* label,
+                           const std::filesystem::path& target,
+                           bool isLast) {
+        Vec2 ts = f.Measure(label);
+        f32 segW = ts.x + kSegPadX * 2.0f;
+        Rect r{x, yMid, segW, kSegH};
+        bool clicked = ui.Button(id, r, "");
+        if (clicked) NavigateTo(target);
+        ui.LabelIn({r.x + kSegPadX, r.y + (r.h - ts.y) * 0.5f, r.w - kSegPadX,
+                    r.h},
+                   label, isLast ? t.textDim : t.text, Align::Left);
+        x += segW;
     };
 
-    // Root segment ("Content") - clicking returns to root.
-    {
-        Rect r{x, rect.y + 3.0f, labelWidth("Content"), 20.0f};
-        if (ui.Button(Slate::Context::ID("cb.root"), r, "Content")) {
-            m_currentFolder.clear();
-        }
-        x += r.w + 2.0f;
-        ui.LabelIn({x, rect.y + 3.0f, 12.0f, 20.0f}, ">", t.textDim);
-        x += 12.0f;
-    }
+    // Root segment ("Content"): folder icon + clickable label. The
+    // target is the empty path (root view) — pick the first registered
+    // root to keep the absolute path consistent with the tree pane.
+    drawFolder(x);
+    x += kIconSize + kIconGap;
+    std::filesystem::path rootTarget;
+    if (m_registry && !m_registry->Roots().empty())
+        rootTarget = m_registry->Roots().front();
+    drawSegment(Slate::Context::ID("cb.bread.root"), "Content", rootTarget,
+                m_currentFolder.empty());
 
-    // Each segment uses its display path (relative to the Content root) for
-    // the navigation id but only the leaf-name as the visible label, so the
-    // breadcrumb never leaks the system root into the UI.
     if (!m_currentFolder.empty() && m_registry) {
+        // Build the relative path ("Foo/Bar") so each segment's label is
+        // its leaf name and its click target is the absolute folder.
         std::string rel = m_registry->DisplayPathFor(m_currentFolder);
-        // Strip the leading "Content/" we already rendered.
         const std::string prefix = "Content/";
         if (rel.size() > prefix.size() && rel.substr(0, prefix.size()) == prefix)
             rel = rel.substr(prefix.size());
+        const std::filesystem::path& absRoot = m_registry->Roots().front();
         std::stringstream ss(rel);
         std::string part;
         std::filesystem::path acc;
+        std::vector<std::pair<std::string, std::filesystem::path>> segs;
         while (std::getline(ss, part, '/')) {
             if (part.empty()) continue;
             acc /= part;
-            Rect r{x, rect.y + 3.0f, labelWidth(part), 20.0f};
-            if (ui.Button(Slate::Context::ID(acc.string().c_str()), r, part)) {
-                // Reconstruct the absolute path from the Content root.
-                if (!m_registry->Roots().empty()) {
-                    NavigateTo(m_registry->Roots().front() / acc);
-                }
-            }
-            x += r.w + 2.0f;
-            ui.LabelIn({x, rect.y + 3.0f, 12.0f, 20.0f}, ">", t.textDim);
-            x += 12.0f;
+            segs.push_back({part, absRoot / acc});
+        }
+        for (usize i = 0; i < segs.size(); ++i) {
+            x += 2.0f;
+            drawChevron(x);
+            x += kSepW;
+            bool isLast = (i + 1 == segs.size());
+            drawSegment(Slate::Context::ID(segs[i].second.string().c_str()),
+                        segs[i].first.c_str(), segs[i].second, isLast);
         }
     }
 }
@@ -306,11 +407,11 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
         return;
     }
 
-    // Sort: folders first, then by name (case-insensitive). Honors
-    // m_sortAscending when the active type is sortable; otherwise always
-    // ascending.
+    // Sort: folders first, then by name (case-insensitive). The toolbar
+    // chevron now drives the filter menu (not sort direction), so the grid
+    // always sorts ascending by name.
     std::sort(entries.begin(), entries.end(),
-              [this](const AssetData* a, const AssetData* b) {
+              [](const AssetData* a, const AssetData* b) {
                   if (a->IsFolder() != b->IsFolder())
                       return a->IsFolder();
                   std::string an = a->assetName;
@@ -320,7 +421,7 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
                   std::transform(bn.begin(), bn.end(), bn.begin(),
                                  [](unsigned char c) { return std::tolower(c); });
                   if (an == bn) return false;
-                  return m_sortAscending ? an < bn : an > bn;
+                  return an < bn;
               });
 
     // Tile grid: compute how many columns fit, then draw rows of tiles.
