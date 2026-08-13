@@ -1031,16 +1031,29 @@ Rect Context::PropertyRow(const Rect& rect, std::string_view label,
 
 bool Context::SearchBox(u64 id, const Rect& rect, std::string& text,
                         std::string_view placeholder) {
-    // Reuse TextField for editing; decorate with a Search icon at the left and
-    // an X (Clear) at the right when text is non-empty.
+    return SearchBox(id, rect, text, TextureHandle{0}, placeholder);
+}
+
+bool Context::SearchBox(u64 id, const Rect& rect, std::string& text,
+                        TextureHandle leadingIcon,
+                        std::string_view placeholder) {
+    // Reuse TextField for editing; decorate with a leading icon at the left
+    // and an X (Clear) at the right when text is non-empty. The leading
+    // icon is the supplied texture (e.g. a PNG search-glass) or the
+    // procedural Icon::Search glyph when no texture is given.
     f32 iconSide = rect.h;
     Rect inner{rect.x + iconSide, rect.y, rect.w - iconSide, rect.h};
-    // Decorative icons live on top of the field, so we draw the field first
-    // (TextField also sets focus + caret), then overlay.
     bool changed = TextField(id, inner, text, placeholder);
-    // Search icon (left).
-    DrawIcon(*this, {rect.x, rect.y, iconSide, rect.h}, Icon::Search,
-             m_theme.textDim);
+    Rect iconR{rect.x, rect.y, iconSide, rect.h};
+    if (leadingIcon) {
+        // Slight inset so the texture isn't flush against the field edges.
+        Rect padR{iconR.x + 4.0f, iconR.y + 4.0f, iconR.w - 8.0f,
+                  iconR.h - 8.0f};
+        m_draw.AddImage(leadingIcon, padR, {0.0f, 0.0f, 1.0f, 1.0f},
+                        m_theme.textDim);
+    } else {
+        DrawIcon(*this, iconR, Icon::Search, m_theme.textDim);
+    }
     if (!text.empty()) {
         if (IconButton(id ^ 0xC1EA12ull,
                       {rect.Right() - iconSide, rect.y, iconSide, rect.h},
@@ -1048,8 +1061,6 @@ bool Context::SearchBox(u64 id, const Rect& rect, std::string& text,
             text.clear();
             changed = true;
         } else {
-            // Draw the X icon explicitly since IconButton with no texture would
-            // not draw it; IconButton draws nothing without an icon texture.
             DrawIcon(*this,
                      {rect.Right() - iconSide, rect.y, iconSide, rect.h},
                      Icon::Close, m_theme.textDim);

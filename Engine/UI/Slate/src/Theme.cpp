@@ -28,12 +28,13 @@ Color Mix(Color a, Color b, f32 t) {
 Theme DarkTheme() {
     Theme t;
 
-    // Neutral surface ramp (deep window -> raised popup).
-    t.surface0 = Color::RGB(16, 17, 21);
-    t.surface1 = Color::RGB(24, 26, 32);
-    t.surface2 = Color::RGB(33, 36, 44);
-    t.surface3 = Color::RGB(45, 49, 59);
-    t.surface4 = Color::RGB(52, 57, 68);
+    // Unreal-style neutral surface ramp: deep window -> raised popup.
+    // Colors roughly mirror Unreal's editor palette so panels feel familiar.
+    t.surface0 = Color::RGB(30, 30, 30);   // window background
+    t.surface1 = Color::RGB(37, 37, 38);   // toolbars / breadcrumbs
+    t.surface2 = Color::RGB(45, 45, 48);   // panel bg, card bg
+    t.surface3 = Color::RGB(63, 63, 70);   // raised (button resting)
+    t.surface4 = Color::RGB(80, 80, 86);   // popups / headers
 
     // Refined Luma-blue accent ramp.
     t.accent = Color::RGB(64, 142, 240);
@@ -43,21 +44,21 @@ Theme DarkTheme() {
     t.accentText = Color::RGB(247, 250, 255);
 
     // Semantic.
-    t.separator = Color::RGB(11, 12, 15);
-    t.outline = Color::RGB(58, 63, 74);
+    t.separator = Color::RGB(20, 20, 20);
+    t.outline = Color::RGB(58, 58, 60);
     t.focusRing = t.accent;
     t.text = Color::RGB(234, 237, 244);
-    t.textDim = Color::RGB(150, 158, 172);
-    t.textDisabled = Color::RGB(96, 102, 114);
-    t.selectionBg = t.accentMuted;
-    t.selectionText = t.accentText;
+    t.textDim = Color::RGB(180, 180, 184);
+    t.textDisabled = Color::RGB(110, 110, 116);
+    t.selectionBg = Color::RGB(38, 79, 138);
+    t.selectionText = Color::RGB(255, 255, 255);
     t.success = Color::RGB(76, 180, 120);
     t.warning = Color::RGB(226, 170, 66);
     t.error = Color::RGB(226, 98, 98);
 
-    // Fields.
-    t.fieldBg = Color::RGB(19, 21, 26);
-    t.fieldBorder = Color::RGB(56, 61, 72);
+    // Fields (search box, text fields).
+    t.fieldBg = Color::RGB(28, 28, 30);
+    t.fieldBorder = Color::RGB(60, 60, 64);
 
     // Legacy flat fields mapped onto the ramp (keeps existing widgets working).
     t.windowBg = t.surface0;
@@ -66,7 +67,7 @@ Theme DarkTheme() {
     t.header = t.surface2;
     t.button = t.surface3;
     t.buttonHover = t.surface4;
-    t.buttonActive = Color::RGB(38, 41, 50);
+    t.buttonActive = Color::RGB(50, 50, 54);
     t.buttonText = Color::RGB(228, 231, 238);
     t.cardBg = t.surface2;
     t.cardHover = t.surface3;

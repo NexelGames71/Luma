@@ -225,3 +225,32 @@ TEST_CASE("Multiple roots are all indexed", "[asset][registry]") {
     REQUIRE(r.LookupByPath(a.Path() / "a.png") != nullptr);
     REQUIRE(r.LookupByPath(b.Path() / "b.png") != nullptr);
 }
+
+TEST_CASE("DisplayPathFor strips the root and prefixes 'Content/'",
+          "[asset][registry][display]") {
+    TempDir dir;
+    dir.Touch("Textures/hero.png");
+    AssetRegistry r;
+    r.AddRoot(dir.Path());
+    r.Scan();
+    auto abs = dir.Path() / "Textures" / "hero.png";
+    auto display = r.DisplayPathFor(abs);
+    REQUIRE(display == "Content/Textures/hero.png");
+}
+
+TEST_CASE("DisplayPathFor falls back to the absolute path when no root matches",
+          "[asset][registry][display]") {
+    AssetRegistry r;
+    auto display = r.DisplayPathFor(std::filesystem::path("C:/elsewhere/x.png"));
+    // Display paths always use forward slashes (mirrors Unreal/Unity
+    // conventions) even on Windows, where the OS path uses '\\'.
+    REQUIRE(display.find("C:/elsewhere/x.png") != std::string::npos);
+}
+
+TEST_CASE("DisplayPathFor handles the root itself", "[asset][registry][display]") {
+    TempDir dir;
+    AssetRegistry r;
+    r.AddRoot(dir.Path());
+    auto display = r.DisplayPathFor(dir.Path());
+    REQUIRE(display == "Content/");
+}

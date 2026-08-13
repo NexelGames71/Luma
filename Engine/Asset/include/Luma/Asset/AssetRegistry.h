@@ -36,6 +36,12 @@ public:
         return m_roots;
     }
 
+    // Returns a user-facing label for `path` rooted at the first registered
+    // content root (e.g. "Content/Textures/hero.png"). Falls back to the
+    // absolute path string if no root contains it. Used by Content Browser
+    // tree rows + breadcrumbs so users never see the system root.
+    std::string DisplayPathFor(const std::filesystem::path& path) const;
+
     // Walks every root and rebuilds the index. Safe to call repeatedly;
     // existing entries are replaced in place so callers holding AssetIds
     // continue to resolve.

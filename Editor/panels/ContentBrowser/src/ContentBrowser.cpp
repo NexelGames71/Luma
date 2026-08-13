@@ -15,6 +15,16 @@ using Slate::Vec2;
 
 ContentBrowserPanel::ContentBrowserPanel() = default;
 
+void ContentBrowserPanel::SetIcons(Luma::TextureHandle sortUp,
+                                   Luma::TextureHandle sortDown,
+                                   Luma::TextureHandle searchGlass,
+                                   Luma::TextureHandle folder) {
+    m_texSortUp = sortUp;
+    m_texSortDown = sortDown;
+    m_texSearchGlass = searchGlass;
+    m_texFolder = folder;
+}
+
 void ContentBrowserPanel::ResetNavigation() {
     m_currentFolder.clear();
     m_selected = AssetId{};
@@ -117,10 +127,55 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
              f.Measure("Snd").x + 18.0f);
     (void)f;
 
-    // Search box on the right.
-    Rect searchR{rect.Right() - 220.0f, rect.y + 6.0f, 212.0f, 24.0f};
+    // Sort arrows: visible on the right of the search box when a sortable
+    // type is active. Clicking either toggles sort direction. Only the
+    // types listed in the brief are sortable (Texture/Mesh/Material/
+    // Shader/Scene/Sound); other types fall back to ascending.
+    bool sortable = m_typeFilter.has_value() &&
+                    (m_typeFilter.value() == AssetType::Texture ||
+                     m_typeFilter.value() == AssetType::Mesh ||
+                     m_typeFilter.value() == AssetType::Material ||
+                     m_typeFilter.value() == AssetType::Shader ||
+                     m_typeFilter.value() == AssetType::Scene ||
+                     m_typeFilter.value() == AssetType::Sound);
+    constexpr f32 kArrowSize = 22.0f;
+    f32 arrowGap = 4.0f;
+    f32 rightEdge = rect.Right() - 8.0f;
+    Rect upArrowR{}, downArrowR{};
+    bool arrowHoverUp = false, arrowHoverDown = false;
+    if (sortable) {
+        upArrowR = Rect{rightEdge - kArrowSize, rect.y + 7.0f, kArrowSize,
+                        kArrowSize};
+        downArrowR = Rect{upArrowR.x - kArrowSize - arrowGap, rect.y + 7.0f,
+                          kArrowSize, kArrowSize};
+        // Background pills for the arrows so they read as buttons.
+        ui.PanelRoundedBordered(upArrowR, m_sortAscending ? t.accentMuted
+                                                          : t.surface3,
+                                t.outline, t.radius.sm, t.border.hairline);
+        ui.PanelRoundedBordered(downArrowR, m_sortAscending ? t.surface3
+                                                            : t.accentMuted,
+                                t.outline, t.radius.sm, t.border.hairline);
+        // The two buttons share a hit zone with each pill (so we treat them
+        // as two distinct selectable rows the panel can detect).
+        if (ui.Selectable(Slate::Context::ID("cb.sort.up"), upArrowR, "",
+                          m_sortAscending, Icon::ChevronUp)) {
+            m_sortAscending = true;
+        }
+        if (ui.Selectable(Slate::Context::ID("cb.sort.down"), downArrowR, "",
+                          !m_sortAscending, Icon::ChevronDown)) {
+            m_sortAscending = false;
+        }
+        rightEdge = downArrowR.x - arrowGap;
+    }
+
+    // Search box on the right of the toolbar, ending before the arrows.
+    f32 searchW = std::min(260.0f, rightEdge - (rect.x + 76.0f));
+    if (searchW < 100.0f) searchW = 100.0f;
+    Rect searchR{rightEdge - searchW, rect.y + 6.0f, searchW, 24.0f};
     ui.SearchBox(Slate::Context::ID("cb.search"), searchR, m_nameFilter,
-                 "Search assets...");
+                 m_texSearchGlass, "Search assets...");
+    (void)arrowHoverUp;
+    (void)arrowHoverDown;
 }
 
 void ContentBrowserPanel::DrawBreadcrumb(Slate::Context& ui,
@@ -145,17 +200,32 @@ void ContentBrowserPanel::DrawBreadcrumb(Slate::Context& ui,
         x += 12.0f;
     }
 
-    for (const auto& seg : BreadcrumbSegments()) {
-        std::string name = seg.filename().string();
-        if (name.empty()) continue;
-        Rect r{x, rect.y + 3.0f, labelWidth(name), 20.0f};
-        if (ui.Button(Slate::Context::ID(seg.string().c_str()), r,
-                      name)) {
-            NavigateTo(seg);
+    // Each segment uses its display path (relative to the Content root) for
+    // the navigation id but only the leaf-name as the visible label, so the
+    // breadcrumb never leaks the system root into the UI.
+    if (!m_currentFolder.empty() && m_registry) {
+        std::string rel = m_registry->DisplayPathFor(m_currentFolder);
+        // Strip the leading "Content/" we already rendered.
+        const std::string prefix = "Content/";
+        if (rel.size() > prefix.size() && rel.substr(0, prefix.size()) == prefix)
+            rel = rel.substr(prefix.size());
+        std::stringstream ss(rel);
+        std::string part;
+        std::filesystem::path acc;
+        while (std::getline(ss, part, '/')) {
+            if (part.empty()) continue;
+            acc /= part;
+            Rect r{x, rect.y + 3.0f, labelWidth(part), 20.0f};
+            if (ui.Button(Slate::Context::ID(acc.string().c_str()), r, part)) {
+                // Reconstruct the absolute path from the Content root.
+                if (!m_registry->Roots().empty()) {
+                    NavigateTo(m_registry->Roots().front() / acc);
+                }
+            }
+            x += r.w + 2.0f;
+            ui.LabelIn({x, rect.y + 3.0f, 12.0f, 20.0f}, ">", t.textDim);
+            x += 12.0f;
         }
-        x += r.w + 2.0f;
-        ui.LabelIn({x, rect.y + 3.0f, 12.0f, 20.0f}, ">", t.textDim);
-        x += 12.0f;
     }
 }
 
@@ -172,18 +242,35 @@ void ContentBrowserPanel::DrawTreePane(Slate::Context& ui,
 
     // Tree rows: for each root, recursively expand one level. Keeps the
     // implementation small; full recursive expand-on-click is a future
-    // enhancement.
+    // enhancement. Folder icons use the supplied folder PNG tinted
+    // orange; fall back to the procedural Icon::Folder glyph when the
+    // texture didn't load.
     f32 y = rect.y + 36.0f;
     if (!m_registry) return;
+    // Orange tint applied to the white folder PNG.
+    const Slate::Color kFolderOrange{255, 178, 92, 255};
+    constexpr f32 kIconSize = 16.0f;
+    auto drawFolderIcon = [&](f32 x, f32 y) {
+        Rect ir{x, y + (kRowH - kIconSize) * 0.5f, kIconSize, kIconSize};
+        if (m_texFolder) {
+            ui.Image(m_texFolder, ir, kFolderOrange);
+        } else {
+            Slate::DrawIcon(ui, ir, Icon::Folder, kFolderOrange);
+        }
+    };
     for (const auto& root : m_registry->Roots()) {
+        // Display label for the root is "Content" (the conventional name of
+        // the registered root). Filename is used as a fallback when the
+        // registry was wired with a non-Content root.
         std::string name = root.filename().string();
-        if (name.empty()) name = root.string();
+        if (name.empty() || name == "Content") name = "Content";
         Rect r{rect.x + 8.0f, y, rect.w - 16.0f, kRowH};
         bool sel = m_currentFolder.empty() || m_currentFolder == root;
         if (ui.Selectable(Slate::Context::ID(root.string().c_str()), r,
-                          name, sel, Icon::Folder)) {
+                          name, sel)) {
             m_currentFolder = root;
         }
+        drawFolderIcon(r.x + 4.0f, r.y);
         y += kRowH + 2.0f;
         // Show direct child folders of this root.
         if (sel) {
@@ -194,9 +281,10 @@ void ContentBrowserPanel::DrawTreePane(Slate::Context& ui,
                 bool csel = (m_currentFolder == child->packagePath);
                 if (ui.Selectable(
                         Slate::Context::ID(child->packagePath.string().c_str()),
-                        cr, child->assetName, csel, Icon::Folder)) {
+                        cr, child->assetName, csel)) {
                     m_currentFolder = child->packagePath;
                 }
+                drawFolderIcon(cr.x + 4.0f, cr.y);
                 y += kRowH + 2.0f;
             }
         }
@@ -218,9 +306,11 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
         return;
     }
 
-    // Sort: folders first, then by name (case-insensitive).
+    // Sort: folders first, then by name (case-insensitive). Honors
+    // m_sortAscending when the active type is sortable; otherwise always
+    // ascending.
     std::sort(entries.begin(), entries.end(),
-              [](const AssetData* a, const AssetData* b) {
+              [this](const AssetData* a, const AssetData* b) {
                   if (a->IsFolder() != b->IsFolder())
                       return a->IsFolder();
                   std::string an = a->assetName;
@@ -229,7 +319,8 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
                   std::string bn = b->assetName;
                   std::transform(bn.begin(), bn.end(), bn.begin(),
                                  [](unsigned char c) { return std::tolower(c); });
-                  return an < bn;
+                  if (an == bn) return false;
+                  return m_sortAscending ? an < bn : an > bn;
               });
 
     // Tile grid: compute how many columns fit, then draw rows of tiles.
@@ -239,6 +330,9 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
     int cols = std::max(1, static_cast<int>(availW / colW));
     f32 startX = rect.x + pad;
     f32 startY = rect.y + pad;
+
+    // Orange tint for folder glyphs.
+    const Slate::Color kFolderOrange{255, 178, 92, 255};
 
     for (usize i = 0; i < entries.size(); ++i) {
         const auto* a = entries[i];
@@ -268,7 +362,17 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
                                 t.border.hairline);
         Rect glyphR{tile.x + 12.0f, tile.y + 12.0f, tile.w - 24.0f,
                     tile.h - 24.0f};
-        Slate::DrawIcon(ui, glyphR, IconForType(a->type), t.textDim);
+        if (a->IsFolder()) {
+            // Folder tile: use the supplied orange-tinted folder PNG when
+            // available; fall back to the procedural Icon::Folder glyph.
+            if (m_texFolder) {
+                ui.Image(m_texFolder, glyphR, kFolderOrange);
+            } else {
+                Slate::DrawIcon(ui, glyphR, Icon::Folder, kFolderOrange);
+            }
+        } else {
+            Slate::DrawIcon(ui, glyphR, IconForType(a->type), t.textDim);
+        }
 
         ui.LabelIn(labelR, a->assetName, t.text, Align::Center);
     }

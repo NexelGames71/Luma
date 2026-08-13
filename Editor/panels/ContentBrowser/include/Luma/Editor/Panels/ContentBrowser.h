@@ -7,6 +7,7 @@
 #include "Luma/Asset/AssetData.h"
 #include "Luma/Asset/AssetId.h"
 #include "Luma/Asset/AssetRegistry.h"
+#include "Luma/RHI/Renderer.h"
 #include "PanelContext.h"
 #include "Luma/Slate/Context.h"
 #include "Luma/Slate/Types.h"
@@ -35,6 +36,14 @@ public:
     void SetRegistry(AssetRegistry* registry) { m_registry = registry; }
     AssetRegistry* Registry() const noexcept { return m_registry; }
 
+    // Loads the four PNGs the panel wants (sort up/down, search glass,
+    // folder). Called once by EditorScreen after the renderer is ready;
+    // missing files just leave the panel falling back to procedural
+    // glyphs. The panel does not own the renderer or the textures.
+    void SetIcons(Luma::TextureHandle sortUp, Luma::TextureHandle sortDown,
+                  Luma::TextureHandle searchGlass,
+                  Luma::TextureHandle folder);
+
     // Clears the navigation stack (e.g. after the project is reloaded).
     void ResetNavigation();
 
@@ -57,6 +66,16 @@ private:
     std::optional<AssetType> m_typeFilter;  // nullopt = all
     AssetId m_selected{};
     bool m_showCreateMenu = false;
+
+    // Per-type sort direction (true = ascending, false = descending). Drives
+    // the small Up/Down arrow buttons in the toolbar's right side.
+    bool m_sortAscending = true;
+
+    // Loaded textures supplied by EditorScreen; 0 = not loaded.
+    Luma::TextureHandle m_texSortUp = 0;
+    Luma::TextureHandle m_texSortDown = 0;
+    Luma::TextureHandle m_texSearchGlass = 0;
+    Luma::TextureHandle m_texFolder = 0;
 
     // Layout constants.
     static constexpr f32 kToolbarH = 36.0f;

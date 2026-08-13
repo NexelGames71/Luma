@@ -52,6 +52,14 @@ public:
     }
     void SetLogoIcon(TextureHandle logo) { m_iconLogo = logo; }
 
+    // Forwards Content Browser chrome icons to the panel. Missing textures
+    // (any zero handle) fall back to procedural glyphs.
+    void SetContentBrowserIcons(TextureHandle sortUp, TextureHandle sortDown,
+                                TextureHandle searchGlass,
+                                TextureHandle folder) {
+        m_contentBrowser.SetIcons(sortUp, sortDown, searchGlass, folder);
+    }
+
 private:
     void AddEntity();
     void CreateEnvironment();

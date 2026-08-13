@@ -295,4 +295,29 @@ void AssetRegistry::RemoveUnder(const std::filesystem::path& dir) {
     }
 }
 
+std::string AssetRegistry::DisplayPathFor(
+    const std::filesystem::path& path) const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto norm = Normalize(path);
+    auto normalizeSeparators = [](std::string s) {
+        std::replace(s.begin(), s.end(), '\\', '/');
+        return s;
+    };
+    // Walk every root; the first one that contains `norm` wins. Strip the
+    // root and prefix the result with "Content/" (since the registry roots
+    // are conventionally the project's Content/ directory).
+    for (const auto& root : m_roots) {
+        auto r = Normalize(root);
+        if (norm == r) return "Content/";
+        auto rel = norm.lexically_relative(r);
+        auto relStr = normalizeSeparators(rel.string());
+        if (relStr.empty() || relStr.front() == '.' ||
+            relStr.find("..") != std::string::npos) {
+            continue;
+        }
+        return "Content/" + relStr;
+    }
+    return normalizeSeparators(norm.string());
+}
+
 }  // namespace Luma

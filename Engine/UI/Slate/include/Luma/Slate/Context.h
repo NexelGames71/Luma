@@ -137,6 +137,12 @@ public:
     // text changed (typing or clearing).
     bool SearchBox(u64 id, const Rect& rect, std::string& text,
                    std::string_view placeholder = "Search...");
+    // Same as above, but uses the supplied texture as the leading icon
+    // instead of the procedural Search glyph. Falls back to the glyph
+    // when texture == 0.
+    bool SearchBox(u64 id, const Rect& rect, std::string& text,
+                   TextureHandle leadingIcon,
+                   std::string_view placeholder = "Search...");
     // Modal popup menu. Returns the clicked item index, or -1 if dismissed.
     // Closes on selection or outside-click; backdrop dims the rest of the UI.
     struct MenuItem {
