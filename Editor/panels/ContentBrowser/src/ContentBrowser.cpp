@@ -176,12 +176,13 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
                 iconColor);
         }
         // "Import" label to the right of the icon; dark on green-hover,
-        // normal text at rest.
+        // normal text at rest. The label rect spans the full pill height so
+        // LabelIn centers the baseline inside the pill (a rect scaled to
+        // the text height starts mid-pill and clips the bottom off).
         Slate::Color labelRest = t.text;
         Slate::Color labelHover = Slate::Color::RGB(20, 30, 24);
         ui.LabelIn({drawR.x + kImportPadX + kImportIconSide + 6.0f,
-                    drawR.y + (drawR.h - importTextSize.y) * 0.5f,
-                    importTextSize.x + 4.0f, drawR.h},
+                    drawR.y, importTextSize.x + 4.0f, drawR.h},
                    "Import", Slate::Mix(labelRest, labelHover, hoverT),
                    Align::Left);
         (void)clicked;
