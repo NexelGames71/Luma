@@ -6,10 +6,19 @@ add_executable(LumaEditor
     SplashScreen.cpp
     EditorScreen.cpp)
 
+# Panels live under Editor/panels/ and expose their headers via
+# Editor/panels/<Name>/include plus the shared Editor/panels/PanelContext.h.
+# LumaEditor needs the same include roots so it can include the public API.
+target_include_directories(LumaEditor
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/Editor/panels)
+
 target_link_libraries(LumaEditor
     PRIVATE Luma::Core Luma::Math Luma::Platform Luma::RenderVulkan Luma::Slate
             Luma::Project Luma::ProjectBrowser Luma::Grid Luma::Scene
-            Luma::Gizmo Luma::VFS)
+            Luma::Gizmo Luma::VFS
+            Luma::PanelWorldOutliner Luma::PanelViewport Luma::PanelInspector
+            Luma::PanelConsole)
 
 set_target_properties(LumaEditor PROPERTIES
     OUTPUT_NAME "LumaEditor"

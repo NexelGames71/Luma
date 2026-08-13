@@ -1,10 +1,16 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "Luma/Editor/Panels/Console.h"
+#include "Luma/Editor/Panels/Inspector.h"
+#include "Luma/Editor/Panels/Viewport.h"
+#include "Luma/Editor/Panels/WorldOutliner.h"
+#include "PanelContext.h"
 #include "Luma/Gizmo/TranslateGizmo.h"
 #include "Luma/Math/Math.h"
 #include "Luma/Project/Project.h"
@@ -16,9 +22,10 @@
 namespace Luma {
 
 // The editor shell: menu bar, toolbar, and a dockable layout (World Outliner,
-// Viewport, Inspector, Console). Drives an ECS Scene (EnTT): the outliner lists
-// entities, the viewport renders them and hosts a translate gizmo, the inspector
-// shows the selection.
+// Viewport, Inspector, Console). Drives an ECS Scene (EnTT) and orchestrates
+// the per-panel modules under Editor/panels/. The panels themselves are
+// self-contained; this class only wires them together + owns the shared
+// state (scene, camera, gizmo, selection).
 class EditorScreen {
 public:
     explicit EditorScreen(const std::filesystem::path& projectFile);
@@ -30,8 +37,10 @@ public:
 
     void Draw(Slate::Context& ui, f32 width, f32 height);
 
-    Slate::Rect ViewportRect() const { return m_viewportRect; }
-    void SetViewportTexture(TextureHandle texture) { m_viewport = texture; }
+    Slate::Rect ViewportRect() const { return m_viewportPanel.Rect(); }
+    void SetViewportTexture(TextureHandle texture) {
+        m_viewportPanel.SetTexture(texture);
+    }
 
     void SetToolbarIcons(TextureHandle play, TextureHandle pause,
                          TextureHandle stop) {
@@ -44,17 +53,11 @@ public:
 private:
     void AddEntity();
     void CreateEnvironment();
-    // Loads the project's startup scene from disk; returns false if there is no
-    // project or no scene file yet. Saves the current scene to that same path.
     bool LoadScene();
     void SaveScene();
     void BuildDock();
-    void UpdateCameraAndGizmo(Slate::Context& ui, const Slate::Rect& viewport);
-    void DrawOutlinerContent(Slate::Context& ui, const Slate::Rect& rect);
-    void DrawViewportContent(Slate::Context& ui, const Slate::Rect& rect);
-    void DrawInspectorContent(Slate::Context& ui, const Slate::Rect& rect);
-    void DrawConsoleContent(Slate::Context& ui, const Slate::Rect& rect);
 
+    // ---- Shared state the panels read/write via PanelContext ----------------
     std::optional<Project> m_project;
     std::string m_title;
 
@@ -62,21 +65,16 @@ private:
     Entity m_selected = kNullEntity;
     Entity m_environment = kNullEntity;
     int m_nextNumber = 1;
-    bool m_showAddMenu = false;   // inspector "Add Component" popup
-    bool m_showFileMenu = false;  // menu-bar "File" dropdown
-    f32 m_fileMenuX = 42.0f;      // x of the File menu button (for the dropdown)
 
     TranslateGizmo m_gizmo;
-    std::vector<SceneInstance> m_instances;  // rebuilt each frame
-    std::vector<SceneLight> m_lights;        // rebuilt each frame
+    std::vector<SceneInstance> m_instances;
+    std::vector<SceneLight> m_lights;
 
-    // Orbit camera.
     f32 m_camYaw = 0.9f;
     f32 m_camPitch = 0.5f;
     f32 m_camDistance = 12.0f;
     Math::Vec3 m_camTarget{0.0f, 0.0f, 0.0f};
 
-    // Cached each BuildSceneView for the gizmo's screen projection in Draw.
     Math::Mat4 m_view = Math::Mat4::Identity();
     f32 m_fovY = 0.9f;
     f32 m_nearZ = 0.1f;
@@ -86,12 +84,21 @@ private:
     Slate::DockSpace m_dock;
     bool m_dockBuilt = false;
 
-    Slate::Rect m_viewportRect{};
-    TextureHandle m_viewport = 0;
+    bool m_showFileMenu = false;
+    f32 m_fileMenuX = 42.0f;
+
     TextureHandle m_iconPlay = 0;
     TextureHandle m_iconPause = 0;
     TextureHandle m_iconStop = 0;
     TextureHandle m_iconLogo = 0;
+
+    // ---- Panels (one per docked pane) ---------------------------------------
+    Editor::Panels::WorldOutlinerPanel m_outlinerPanel;
+    Editor::Panels::ViewportPanel m_viewportPanel;
+    Editor::Panels::InspectorPanel m_inspectorPanel;
+    Editor::Panels::ConsolePanel m_consolePanel;
+
+    Editor::Panels::PanelContext BuildPanelContext();
 };
 
 }  // namespace Luma
