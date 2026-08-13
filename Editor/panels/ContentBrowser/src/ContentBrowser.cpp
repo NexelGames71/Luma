@@ -84,17 +84,32 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     ui.GradientRect(rect, t.surface2, t.surface1);
     ui.Panel({rect.x, rect.Bottom() - 1.0f, rect.w, 1.0f}, t.separator);
 
-    // Reload button (re-scans the registry). Back/forward navigation now
-    // lives in the breadcrumb — clicking "Content" returns to root and
-    // each segment jumps back to its ancestor folder.
+    // Reload button (re-scans the registry). Rendered as a bare icon —
+    // no button chrome: draw the PNG directly, 20px inside a 24px hit
+    // rect, tinted brighter on hover. Back/forward navigation now lives
+    // in the breadcrumb.
     Rect reloadR{rect.x + 8.0f, rect.y + 6.0f, 24.0f, 24.0f};
-    if (m_texReload) {
-        if (ui.IconButton(Slate::Context::ID("cb.reload"), reloadR,
-                          m_texReload)) {
-            if (m_registry) m_registry->Scan();
+    {
+        bool reloadHover = reloadR.Contains(ui.mouse());
+        if (reloadHover) ui.RequestCursor(Luma::CursorShape::Hand);
+        if (reloadHover && ui.mousePressed(0)) m_reloadPressed = true;
+        bool clicked = false;
+        if (ui.mouseReleased(0)) {
+            if (m_reloadPressed && reloadHover) clicked = true;
+            m_reloadPressed = false;
         }
-    } else if (ui.Button(Slate::Context::ID("cb.reload"), reloadR, "R")) {
-        if (m_registry) m_registry->Scan();
+        constexpr f32 kReloadIcon = 20.0f;
+        Rect iconR{reloadR.x + (reloadR.w - kReloadIcon) * 0.5f,
+                   reloadR.y + (reloadR.h - kReloadIcon) * 0.5f,
+                   kReloadIcon, kReloadIcon};
+        if (m_texReload) {
+            ui.Image(m_texReload, iconR,
+                     reloadHover ? t.text : t.textDim);
+        } else {
+            Slate::DrawIcon(ui, iconR, Slate::Icon::Refresh,
+                            reloadHover ? t.text : t.textDim);
+        }
+        if (clicked && m_registry) m_registry->Scan();
     }
 
     // Search bar with embedded filter toggle.
