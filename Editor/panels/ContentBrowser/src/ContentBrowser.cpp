@@ -166,16 +166,54 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
 
     // Breadcrumb: lives in the gap between Refresh and the search bar,
     // same row, wrapped in a rounded "field" box that matches the search
-    // bar's look. No folder icon; no hover/highlight on segments (the
-    // text serves as the click target).
+    // bar's look. The box is sized to the breadcrumb content (not the
+    // full gap), so every segment + its trailing chevron are visible and
+    // the last word is never clipped. No folder icon; no hover/highlight
+    // on segments (the text is the click target).
+    constexpr f32 kSegH = 20.0f;
     constexpr f32 kSegPadX = 8.0f;
     constexpr f32 kChevW = 16.0f;
-    constexpr f32 kBoxPad = 8.0f;   // left padding inside the box
-    constexpr f32 kBoxRightPad = 8.0f;  // right margin so text doesn't clip
+    constexpr f32 kBoxPad = 8.0f;   // left/right padding inside the box
     const Slate::Font& f = ui.uiFont();
+
+    // Build the segment list first so we can measure the total content
+    // width and size the box to fit it.
+    std::filesystem::path rootTarget;
+    if (m_registry && !m_registry->Roots().empty())
+        rootTarget = m_registry->Roots().front();
+    struct Seg { std::string label; std::filesystem::path target; };
+    std::vector<Seg> segs;
+    segs.push_back({"Content", rootTarget});
+    if (!m_currentFolder.empty() && m_registry) {
+        std::string rel = m_registry->DisplayPathFor(m_currentFolder);
+        const std::string prefix = "Content/";
+        if (rel.size() > prefix.size() && rel.substr(0, prefix.size()) == prefix)
+            rel = rel.substr(prefix.size());
+        const std::filesystem::path& absRoot = m_registry->Roots().front();
+        std::stringstream ss(rel);
+        std::string part;
+        std::filesystem::path acc;
+        while (std::getline(ss, part, '/')) {
+            if (part.empty()) continue;
+            acc /= part;
+            segs.push_back({part, absRoot / acc});
+        }
+    }
+
+    // Measure content width: root segment + (chevron + segment) for each
+    // additional segment, plus a trailing chevron gap pair spacer.
+    f32 contentW = kBoxPad;  // left padding
+    for (usize i = 0; i < segs.size(); ++i) {
+        if (i > 0) contentW += 2.0f + kChevW;
+        contentW += f.Measure(segs[i].label).x + kSegPadX * 2.0f;
+    }
+    contentW += kBoxPad;  // right padding
+
+    // Box: sized to content, capped to the available gap (so a very long
+    // path can't push the box past the search bar).
     f32 bLeft = rect.x + 40.0f;
-    f32 bRight = barX - kBarGap;
-    f32 boxW = bRight - bLeft;
+    f32 bMaxRight = barX - kBarGap;
+    f32 boxW = std::min(contentW, bMaxRight - bLeft);
     Rect boxR{bLeft, rect.y + 6.0f, boxW, kBarH};
     // Match the search bar: outer field-border ring + inner field fill,
     // both rounded with the field radius.
@@ -186,19 +224,18 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
 
     // Segment text cursor starts inside the box's left padding.
     f32 x = boxR.x + kBoxPad;
-    // Segments are vertically centered in the box (full box height) so
-    // text sits dead-center, not biased high.
-    auto segRect = [&](f32 w) {
-        return Rect{x, boxR.y, w, boxR.h};
-    };
+    // Segment band vertically centered in the toolbar (matches the old
+    // breadcrumb row baseline, not the box height — keeps text sitting
+    // where it has always been, not biased by the box).
+    f32 yMid = rect.y + (rect.h - kSegH) * 0.5f;
 
-    // Clip the breadcrumb to the box interior so long paths can't bleed
-    // across the search bar.
+    // Clip the breadcrumb to the box interior so a path that exceeds the
+    // capped box can't bleed across the search bar.
     ui.PushClip({boxR.x, boxR.y, boxR.w, boxR.h});
 
     auto drawChevron = [&](f32 xPos) {
         Slate::DrawIcon(ui,
-                        {xPos, boxR.y + (boxR.h - 10.0f) * 0.5f, 10.0f, 10.0f},
+                        {xPos, yMid + (kSegH - 10.0f) * 0.5f, 10.0f, 10.0f},
                         Icon::ChevronRight, t.textDisabled);
     };
     // No-chrome segment: hit-test inline (no hover/active fill drawn) and
@@ -207,14 +244,7 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
                            const std::filesystem::path& target, bool isLast) {
         Vec2 ts = f.Measure(label);
         f32 segW = ts.x + kSegPadX * 2.0f;
-        f32 availW = (boxR.Right() - kBoxRightPad) - x;
-        if (segW > availW) {
-            // Doesn't fully fit — leave x past the right margin so the
-            // remaining segments (and any trailing chevron) skip too.
-            x = boxR.Right();
-            return;
-        }
-        Rect r = segRect(segW);
+        Rect r{x, yMid, segW, kSegH};
         bool hover = r.Contains(ui.mouse());
         if (hover) ui.RequestCursor(Luma::CursorShape::Hand);
         if (hover && ui.mousePressed(0)) m_breadPressed = true;
@@ -228,36 +258,14 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
         x += segW;
     };
 
-    // Root segment.
-    std::filesystem::path rootTarget;
-    if (m_registry && !m_registry->Roots().empty())
-        rootTarget = m_registry->Roots().front();
-    drawSegment("Content", rootTarget, m_currentFolder.empty());
-
-    if (!m_currentFolder.empty() && m_registry) {
-        std::string rel = m_registry->DisplayPathFor(m_currentFolder);
-        const std::string prefix = "Content/";
-        if (rel.size() > prefix.size() && rel.substr(0, prefix.size()) == prefix)
-            rel = rel.substr(prefix.size());
-        const std::filesystem::path& absRoot = m_registry->Roots().front();
-        std::stringstream ss(rel);
-        std::string part;
-        std::filesystem::path acc;
-        std::vector<std::pair<std::string, std::filesystem::path>> segs;
-        while (std::getline(ss, part, '/')) {
-            if (part.empty()) continue;
-            acc /= part;
-            segs.push_back({part, absRoot / acc});
-        }
-        for (usize i = 0; i < segs.size(); ++i) {
+    for (usize i = 0; i < segs.size(); ++i) {
+        if (i > 0) {
             x += 2.0f;
-            // Skip the chevron + segment if either doesn't fully fit.
-            if (x + kChevW > boxR.Right() - kBoxRightPad) break;
             drawChevron(x);
             x += kChevW;
-            bool isLast = (i + 1 == segs.size());
-            drawSegment(segs[i].first.c_str(), segs[i].second, isLast);
         }
+        bool isLast = (i + 1 == segs.size());
+        drawSegment(segs[i].label.c_str(), segs[i].target, isLast);
     }
     ui.PopClip();
 
