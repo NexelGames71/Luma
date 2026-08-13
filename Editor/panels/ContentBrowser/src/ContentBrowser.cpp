@@ -96,13 +96,14 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     }
 
     // Search bar with embedded filter toggle.
-    // Layout: [search-glass | text-field (with clear-X) || toggle ]
+    // Layout: [Up][Refresh] [breadcrumb segments...] [search][toggle]
     // The toggle lives inside the bar's right edge and shows a down chevron
     // when the filter menu is closed / up chevron when open.
     constexpr f32 kBarH = 24.0f;
     constexpr f32 kToggleW = 26.0f;
     constexpr f32 kSepW = 1.0f;
     constexpr f32 kBarMaxW = 240.0f;
+    constexpr f32 kBarGap = 8.0f;
     f32 barRight = rect.Right() - 8.0f;
     f32 toggleX = barRight - kToggleW;
     // Keep the search bar a fixed, Unreal-style width (not the full
@@ -145,6 +146,91 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
                     {toggleR.x + (kToggleW - 12.0f) * 0.5f,
                      toggleR.y + (kBarH - 12.0f) * 0.5f, 12.0f, 12.0f},
                     chev, toggleHover ? t.text : t.textDim);
+
+    // Breadcrumb: lives in the gap between Refresh and the search bar,
+    // same row. Unreal-style with an orange folder glyph on "Content",
+    // Icon::ChevronRight separators, and clickable segments.
+    constexpr f32 kSegH = 20.0f;
+    constexpr f32 kSegPadX = 8.0f;
+    constexpr f32 kIconSize = 14.0f;
+    constexpr f32 kIconGap = 4.0f;
+    constexpr f32 kChevW = 16.0f;
+    const Slate::Color kFolderOrange{255, 178, 92, 255};
+    const Slate::Font& f = ui.uiFont();
+    f32 x = rect.x + 68.0f;
+    f32 bRight = barX - kBarGap;
+    f32 yMid = rect.y + (rect.h - kSegH) * 0.5f;
+
+    // Clip the breadcrumb to its gap so segment labels can't draw under
+    // the search bar if the path is very long.
+    ui.PushClip({x, rect.y, bRight - x, rect.h});
+
+    auto drawFolder = [&](f32 xPos) {
+        if (m_texFolder) {
+            ui.Image(m_texFolder,
+                     {xPos, yMid + (kSegH - kIconSize) * 0.5f, kIconSize,
+                      kIconSize},
+                     kFolderOrange);
+        } else {
+            Slate::DrawIcon(ui,
+                            {xPos, yMid + (kSegH - kIconSize) * 0.5f,
+                             kIconSize, kIconSize},
+                            Icon::Folder, kFolderOrange);
+        }
+    };
+    auto drawChevron = [&](f32 xPos) {
+        Slate::DrawIcon(ui,
+                        {xPos, yMid + (kSegH - 10.0f) * 0.5f, 10.0f, 10.0f},
+                        Icon::ChevronRight, t.textDisabled);
+    };
+    auto drawSegment = [&](u64 id, const char* label,
+                           const std::filesystem::path& target, bool isLast) {
+        Vec2 ts = f.Measure(label);
+        f32 segW = ts.x + kSegPadX * 2.0f;
+        Rect r{x, yMid, segW, kSegH};
+        if (ui.Button(id, r, "")) NavigateTo(target);
+        ui.LabelIn({r.x + kSegPadX, r.y + (r.h - ts.y) * 0.5f, r.w - kSegPadX,
+                    r.h},
+                   label, isLast ? t.textDim : t.text, Align::Left);
+        x += segW;
+    };
+
+    // Root segment.
+    drawFolder(x);
+    x += kIconSize + kIconGap;
+    std::filesystem::path rootTarget;
+    if (m_registry && !m_registry->Roots().empty())
+        rootTarget = m_registry->Roots().front();
+    drawSegment(Slate::Context::ID("cb.bread.root"), "Content", rootTarget,
+                m_currentFolder.empty());
+
+    if (!m_currentFolder.empty() && m_registry) {
+        std::string rel = m_registry->DisplayPathFor(m_currentFolder);
+        const std::string prefix = "Content/";
+        if (rel.size() > prefix.size() && rel.substr(0, prefix.size()) == prefix)
+            rel = rel.substr(prefix.size());
+        const std::filesystem::path& absRoot = m_registry->Roots().front();
+        std::stringstream ss(rel);
+        std::string part;
+        std::filesystem::path acc;
+        std::vector<std::pair<std::string, std::filesystem::path>> segs;
+        while (std::getline(ss, part, '/')) {
+            if (part.empty()) continue;
+            acc /= part;
+            segs.push_back({part, absRoot / acc});
+        }
+        for (usize i = 0; i < segs.size(); ++i) {
+            x += 2.0f;
+            if (x > bRight) break;  // stop before clipping bleeds into search
+            drawChevron(x);
+            x += kChevW;
+            if (x > bRight) break;
+            bool isLast = (i + 1 == segs.size());
+            drawSegment(Slate::Context::ID(segs[i].second.string().c_str()),
+                        segs[i].first.c_str(), segs[i].second, isLast);
+        }
+    }
+    ui.PopClip();
 
     // Drop-down: deferred to after the panes are drawn (see Draw) so it
     // overlays the tree / grid instead of being painted over by them.
@@ -235,99 +321,7 @@ void ContentBrowserPanel::DrawFilterMenu(Slate::Context& ui,
                     row.w - 52.0f, kMenuRowH},
                    it.label,
                    isActive ? t.selectionText : t.text,
-                   Slate::Align::Left);
-    }
-}
-
-void ContentBrowserPanel::DrawBreadcrumb(Slate::Context& ui,
-                                         const Slate::Rect& rect) {
-    Slate::Theme& t = ui.theme();
-    ui.Panel(rect, t.surface1);
-    ui.Panel({rect.x, rect.Bottom() - 1.0f, rect.w, 1.0f}, t.separator);
-
-    // Unreal-style breadcrumb:
-    //   [folder] Content  >  SubFolder  >  Leaf
-    // Each segment is a clickable button (returns to that folder); the
-    // final segment is the current folder and is rendered in textDim to
-    // read as the trail's terminus.
-    constexpr f32 kSegH = 20.0f;
-    constexpr f32 kSegPadX = 8.0f;
-    constexpr f32 kIconSize = 14.0f;
-    constexpr f32 kIconGap = 4.0f;
-    constexpr f32 kSepW = 16.0f;
-    const Slate::Color kFolderOrange{255, 178, 92, 255};
-    const Slate::Font& f = ui.uiFont();
-    f32 x = rect.x + 10.0f;
-    f32 yMid = rect.y + (rect.h - kSegH) * 0.5f;
-
-    auto drawFolder = [&](f32 xPos) {
-        if (m_texFolder) {
-            ui.Image(m_texFolder,
-                     {xPos, yMid + (kSegH - kIconSize) * 0.5f, kIconSize,
-                      kIconSize},
-                     kFolderOrange);
-        } else {
-            Slate::DrawIcon(ui,
-                            {xPos, yMid + (kSegH - kIconSize) * 0.5f,
-                             kIconSize, kIconSize},
-                            Icon::Folder, kFolderOrange);
-        }
-    };
-    auto drawChevron = [&](f32 xPos) {
-        Slate::DrawIcon(ui,
-                        {xPos, yMid + (kSegH - 10.0f) * 0.5f, 10.0f, 10.0f},
-                        Icon::ChevronRight, t.textDisabled);
-    };
-    auto drawSegment = [&](u64 id, const char* label,
-                           const std::filesystem::path& target,
-                           bool isLast) {
-        Vec2 ts = f.Measure(label);
-        f32 segW = ts.x + kSegPadX * 2.0f;
-        Rect r{x, yMid, segW, kSegH};
-        bool clicked = ui.Button(id, r, "");
-        if (clicked) NavigateTo(target);
-        ui.LabelIn({r.x + kSegPadX, r.y + (r.h - ts.y) * 0.5f, r.w - kSegPadX,
-                    r.h},
-                   label, isLast ? t.textDim : t.text, Align::Left);
-        x += segW;
-    };
-
-    // Root segment ("Content"): folder icon + clickable label. The
-    // target is the empty path (root view) — pick the first registered
-    // root to keep the absolute path consistent with the tree pane.
-    drawFolder(x);
-    x += kIconSize + kIconGap;
-    std::filesystem::path rootTarget;
-    if (m_registry && !m_registry->Roots().empty())
-        rootTarget = m_registry->Roots().front();
-    drawSegment(Slate::Context::ID("cb.bread.root"), "Content", rootTarget,
-                m_currentFolder.empty());
-
-    if (!m_currentFolder.empty() && m_registry) {
-        // Build the relative path ("Foo/Bar") so each segment's label is
-        // its leaf name and its click target is the absolute folder.
-        std::string rel = m_registry->DisplayPathFor(m_currentFolder);
-        const std::string prefix = "Content/";
-        if (rel.size() > prefix.size() && rel.substr(0, prefix.size()) == prefix)
-            rel = rel.substr(prefix.size());
-        const std::filesystem::path& absRoot = m_registry->Roots().front();
-        std::stringstream ss(rel);
-        std::string part;
-        std::filesystem::path acc;
-        std::vector<std::pair<std::string, std::filesystem::path>> segs;
-        while (std::getline(ss, part, '/')) {
-            if (part.empty()) continue;
-            acc /= part;
-            segs.push_back({part, absRoot / acc});
-        }
-        for (usize i = 0; i < segs.size(); ++i) {
-            x += 2.0f;
-            drawChevron(x);
-            x += kSepW;
-            bool isLast = (i + 1 == segs.size());
-            drawSegment(Slate::Context::ID(segs[i].second.string().c_str()),
-                        segs[i].first.c_str(), segs[i].second, isLast);
-        }
+                    Slate::Align::Left);
     }
 }
 
@@ -492,14 +486,12 @@ void ContentBrowserPanel::Draw(Slate::Context& ui, const Slate::Rect& body,
         return;
     }
     Rect toolbar{body.x, body.y, body.w, kToolbarH};
-    Rect breadcrumb{body.x, toolbar.Bottom(), body.w, kBreadcrumbH};
-    f32 bodyTop = breadcrumb.Bottom();
+    f32 bodyTop = toolbar.Bottom();
     Rect treePane{body.x, bodyTop, kTreePaneW, body.Bottom() - bodyTop};
     Rect gridPane{treePane.Right(), bodyTop, body.w - kTreePaneW,
                   body.Bottom() - bodyTop};
 
     DrawToolbar(ui, toolbar);
-    DrawBreadcrumb(ui, breadcrumb);
     DrawTreePane(ui, treePane, ctx);
     DrawGridPane(ui, gridPane, ctx);
 

@@ -86,7 +86,6 @@ private:
 
     // Layout constants.
     static constexpr f32 kToolbarH = 36.0f;
-    static constexpr f32 kBreadcrumbH = 26.0f;
     static constexpr f32 kTreePaneW = 220.0f;
     static constexpr f32 kRowH = 24.0f;
     static constexpr f32 kTileSize = 80.0f;
@@ -94,7 +93,6 @@ private:
 
     // Draw helpers (called from Draw).
     void DrawToolbar(Slate::Context& ui, const Slate::Rect& rect);
-    void DrawBreadcrumb(Slate::Context& ui, const Slate::Rect& rect);
     void DrawTreePane(Slate::Context& ui, const Slate::Rect& rect,
                       PanelContext& ctx);
     void DrawGridPane(Slate::Context& ui, const Slate::Rect& rect,
