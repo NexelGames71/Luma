@@ -102,10 +102,12 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     constexpr f32 kBarH = 24.0f;
     constexpr f32 kToggleW = 26.0f;
     constexpr f32 kSepW = 1.0f;
-    constexpr f32 kGap = 8.0f;
+    constexpr f32 kBarMaxW = 240.0f;
     f32 barRight = rect.Right() - 8.0f;
     f32 toggleX = barRight - kToggleW;
-    f32 barW = std::max(160.0f, toggleX - (rect.x + 68.0f) - kGap);
+    // Keep the search bar a fixed, Unreal-style width (not the full
+    // toolbar); right-align it against the filter toggle.
+    f32 barW = std::min(kBarMaxW, toggleX - (rect.x + 68.0f));
     if (barW < 140.0f) barW = 140.0f;
     f32 barX = toggleX - kSepW - barW;
     Rect barR{barX, rect.y + 6.0f, barW, kBarH};
