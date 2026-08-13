@@ -176,6 +176,9 @@ public:
     // A full-width selectable list row (used by the outliner).
     bool Selectable(u64 id, const Rect& rect, std::string_view label,
                     bool selected);
+    // Same as above, but draws an optional leading icon (drawn at left).
+    bool Selectable(u64 id, const Rect& rect, std::string_view label,
+                    bool selected, Icon icon);
 
     Theme& theme() { return m_theme; }
     Font& font() { return m_font; }

@@ -2,6 +2,8 @@
 
 luma_require_catch2()
 
+add_subdirectory(Editor)
+
 add_executable(LumaTests
     Core/AssertTests.cpp
     Core/LogTests.cpp
@@ -24,11 +26,12 @@ add_executable(LumaTests
     Asset/AssetIdTests.cpp
     Asset/AssetScannerTests.cpp
     Asset/AssetRegistryTests.cpp
+    Editor/ContentBrowserTests.cpp
     VFS/PathTests.cpp
     VFS/VFSTests.cpp
     VFS/FileWatcherTests.cpp)
 
-target_link_libraries(LumaTests PRIVATE Luma::Core Luma::Project Luma::Serialization Luma::Scene Luma::Slate Luma::Asset Luma::VFS Catch2::Catch2WithMain)
+target_link_libraries(LumaTests PRIVATE Luma::Core Luma::Project Luma::Serialization Luma::Scene Luma::Slate Luma::Asset Luma::VFS Luma::PanelContentBrowserForTest Catch2::Catch2WithMain)
 
 set_target_properties(LumaTests PROPERTIES FOLDER "Tests")
 

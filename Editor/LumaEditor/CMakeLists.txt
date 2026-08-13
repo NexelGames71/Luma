@@ -16,9 +16,9 @@ target_include_directories(LumaEditor
 target_link_libraries(LumaEditor
     PRIVATE Luma::Core Luma::Math Luma::Platform Luma::RenderVulkan Luma::Slate
             Luma::Project Luma::ProjectBrowser Luma::Grid Luma::Scene
-            Luma::Gizmo Luma::VFS
+            Luma::Gizmo Luma::VFS Luma::Asset
             Luma::PanelWorldOutliner Luma::PanelViewport Luma::PanelInspector
-            Luma::PanelConsole)
+            Luma::PanelConsole Luma::PanelContentBrowser)
 
 set_target_properties(LumaEditor PROPERTIES
     OUTPUT_NAME "LumaEditor"

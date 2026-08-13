@@ -318,6 +318,27 @@ void DrawIcon(Context& ctx, const Rect& box, Icon icon, Color color) {
         case Icon::Plane:        DrawPrimitivePlane(ctx, box, color); break;
         case Icon::Cylinder:     DrawPrimitiveCylinder(ctx, box, color); break;
         case Icon::Refresh:      DrawRefresh(ctx, box, color); break;
+        case Icon::Image: {
+            // A square frame with a small mountain + sun inside.
+            f32 x = box.x, y = box.y, w = box.w, h = box.h;
+            f32 s = StrokeWidth(ctx);
+            ctx.drawList().AddRectOutline({x, y, w, h}, color, s);
+            // Mountain triangle.
+            f32 baseY = y + h * 0.78f;
+            ctx.drawList().AddTriangle(
+                {x + w * 0.10f, baseY},
+                {x + w * 0.45f, y + h * 0.30f},
+                {x + w * 0.55f, baseY}, color);
+            ctx.drawList().AddTriangle(
+                {x + w * 0.40f, baseY},
+                {x + w * 0.65f, y + h * 0.45f},
+                {x + w * 0.78f, baseY}, color);
+            // Sun.
+            f32 sunR = std::max(1.5f, w * 0.08f);
+            ctx.drawList().AddCircleFilled(
+                {x + w * 0.78f, y + h * 0.22f}, sunR, color);
+            break;
+        }
         case Icon::None:         break;
     }
 }

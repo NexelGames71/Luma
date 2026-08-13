@@ -35,6 +35,7 @@ enum class Icon {
     Plane,
     Cylinder,
     Refresh,
+    Image,
 };
 
 }  // namespace Luma::Slate

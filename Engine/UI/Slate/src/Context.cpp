@@ -551,6 +551,19 @@ bool Context::Selectable(u64 id, const Rect& rect, std::string_view label,
     return clicked;
 }
 
+bool Context::Selectable(u64 id, const Rect& rect, std::string_view label,
+                         bool selected, Icon icon) {
+    // Same behavior as the plain overload, but draws an icon glyph at the
+    // left and indents the label. Used by the Content Browser's tree pane.
+    bool clicked = Selectable(id, rect, label, selected);
+    f32 iconSize = rect.h - m_theme.space.xs * 2.0f;
+    Rect iconR{rect.x + m_theme.space.xs, rect.y + m_theme.space.xs,
+               iconSize, iconSize};
+    DrawIcon(*this, iconR, icon,
+             selected ? m_theme.selectionText : m_theme.text);
+    return clicked;
+}
+
 bool Context::Checkbox(u64 id, const Rect& box, std::string_view label,
                        bool& value) {
     // Clickable region spans the box plus the label, with token padding.

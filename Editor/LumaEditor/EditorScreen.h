@@ -6,7 +6,9 @@
 #include <string>
 #include <vector>
 
+#include "Luma/Asset/AssetRegistry.h"
 #include "Luma/Editor/Panels/Console.h"
+#include "Luma/Editor/Panels/ContentBrowser.h"
 #include "Luma/Editor/Panels/Inspector.h"
 #include "Luma/Editor/Panels/Viewport.h"
 #include "Luma/Editor/Panels/WorldOutliner.h"
@@ -84,6 +86,10 @@ private:
     Slate::DockSpace m_dock;
     bool m_dockBuilt = false;
 
+    // Content Browser — wires to the project's Content/ folder so the
+    // registry is populated before the panel is drawn each frame.
+    AssetRegistry m_assetRegistry;
+
     bool m_showFileMenu = false;
     f32 m_fileMenuX = 42.0f;
 
@@ -97,6 +103,7 @@ private:
     Editor::Panels::ViewportPanel m_viewportPanel;
     Editor::Panels::InspectorPanel m_inspectorPanel;
     Editor::Panels::ConsolePanel m_consolePanel;
+    Editor::Panels::ContentBrowserPanel m_contentBrowser;
 
     Editor::Panels::PanelContext BuildPanelContext();
 };

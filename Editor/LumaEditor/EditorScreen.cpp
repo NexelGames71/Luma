@@ -33,6 +33,21 @@ EditorScreen::EditorScreen(const std::filesystem::path& projectFile) {
         LUMA_LOG_ERROR("Editor", "could not open project: {}", err);
     }
     if (!LoadScene()) CreateEnvironment();
+
+    // Wire the content browser to an asset registry rooted at the project's
+    // Content/ folder. The panel reads from this; the registry is owned
+    // here so we can call Scan() on file-watcher events.
+    if (m_project) {
+        auto contentRoot = m_project->ContentDir();
+        std::error_code ec;
+        if (std::filesystem::exists(contentRoot, ec)) {
+            m_assetRegistry.AddRoot(contentRoot);
+            m_assetRegistry.Scan();
+            LUMA_LOG_INFO("Editor", "content root: {} ({} entries)",
+                          contentRoot.string(), m_assetRegistry.Size());
+        }
+        m_contentBrowser.SetRegistry(&m_assetRegistry);
+    }
 }
 
 void EditorScreen::CreateEnvironment() {
@@ -216,10 +231,16 @@ void EditorScreen::BuildDock() {
                         auto ctx = BuildPanelContext();
                         m_consolePanel.Draw(c, r, ctx);
                     });
+    m_dock.AddPanel("content", "Content Browser",
+                    [this](Slate::Context& c, const Rect& r) {
+                        auto ctx = BuildPanelContext();
+                        m_contentBrowser.Draw(c, r, ctx);
+                    });
     m_dock.DockRoot("viewport");
     m_dock.DockWith("console", "viewport", Slate::DockDir::Down, 0.28f);
     m_dock.DockWith("outliner", "viewport", Slate::DockDir::Left, 0.2f);
     m_dock.DockWith("inspector", "viewport", Slate::DockDir::Right, 0.24f);
+    m_dock.DockWith("content", "outliner", Slate::DockDir::Down, 0.45f);
     m_dockBuilt = true;
 }
 
