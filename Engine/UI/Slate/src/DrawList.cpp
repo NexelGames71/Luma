@@ -149,6 +149,57 @@ void DrawList::AddRectOutline(const Rect& rect, Color color, f32 t) {
     AddRectFilled(Rect{rect.Right() - t, rect.y, t, rect.h}, color);        // right
 }
 
+void DrawList::AddRectOutlineRounded(const Rect& rect, Color color,
+                                     f32 t, f32 radius) {
+    if (t <= 0.0f) return;
+    f32 r = std::min(radius, std::min(rect.w, rect.h) * 0.5f);
+    if (r <= 0.75f) {
+        AddRectOutline(rect, color, t);
+        return;
+    }
+    f32 halfT = t * 0.5f;
+    // Outer + inner corner centers share the same pivot; the stroke is the
+    // band between radius r-t/2 and r+t/2 (clamped).
+    f32 ro = r + halfT;
+    f32 ri = std::max(0.0f, r - halfT);
+    // Straight edge bars span between the corner arcs (lengthwise ±r from
+    // each side) and are `t` thick, centered on the perimeter.
+    // Top edge.
+    AddRectFilled({rect.x + r, rect.y - halfT, rect.w - 2.0f * r, t}, color);
+    // Bottom edge.
+    AddRectFilled({rect.x + r, rect.Bottom() - halfT, rect.w - 2.0f * r, t},
+                  color);
+    // Left edge.
+    AddRectFilled({rect.x - halfT, rect.y + r, t, rect.h - 2.0f * r}, color);
+    // Right edge.
+    AddRectFilled({rect.Right() - halfT, rect.y + r, t, rect.h - 2.0f * r},
+                  color);
+    // Corner arcs: each arc is sampled as N quads between radius ri and ro
+    // around its corner pivot. The four corners use pivots:
+    Vec2 pivots[4] = {
+        {rect.x + r, rect.y + r},               // top-left  (sweep pi..1.5pi)
+        {rect.Right() - r, rect.y + r},          // top-right (sweep 1.5pi..2pi)
+        {rect.Right() - r, rect.Bottom() - r},  // br        (sweep 0..0.5pi)
+        {rect.x + r, rect.Bottom() - r},        // bl        (sweep 0.5pi..pi)
+    };
+    f32 aStart[4] = {kPi, kPi * 1.5f, 0.0f, kPi * 0.5f};
+    for (int c = 0; c < 4; ++c) {
+        constexpr int kSeg = 5;
+        Vec2 p = pivots[c];
+        for (int i = 0; i < kSeg; ++i) {
+            f32 a0 = aStart[c] + (kPi * 0.5f) * (static_cast<f32>(i) / kSeg);
+            f32 a1 = aStart[c] + (kPi * 0.5f) *
+                                     (static_cast<f32>(i + 1) / kSeg);
+            Vec2 o0o{p.x + std::cos(a0) * ro, p.y + std::sin(a0) * ro};
+            Vec2 o1o{p.x + std::cos(a1) * ro, p.y + std::sin(a1) * ro};
+            Vec2 o0i{p.x + std::cos(a0) * ri, p.y + std::sin(a0) * ri};
+            Vec2 o1i{p.x + std::cos(a1) * ri, p.y + std::sin(a1) * ri};
+            Vec2 quad[4] = {o0o, o1o, o1i, o0i};
+            AddConvexPolyFilled(quad, 4, color);
+        }
+    }
+}
+
 void DrawList::AddLine(Vec2 a, Vec2 b, Color color, f32 thickness) {
     // Axis-aligned (or near-axis) lines collapse to rects. Diagonal lines are
     // rasterized as a thin rotated quad. For our purposes (icons, splitters,

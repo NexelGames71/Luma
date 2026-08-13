@@ -26,6 +26,11 @@ public:
     void AddRectFilledRounded(const Rect& rect, Color color, f32 radius);
     void AddRectFilledGradient(const Rect& rect, Color top, Color bottom);
     void AddRectOutline(const Rect& rect, Color color, f32 thickness = 1.0f);
+    // Outline of a rounded rect (stroke centered on the perimeter). Used for
+    // focus rings so they match the rounded field shape instead of cutting
+    // sharp corners across it.
+    void AddRectOutlineRounded(const Rect& rect, Color color, f32 thickness,
+                               f32 radius);
     void AddConvexPolyFilled(const Vec2* points, int count, Color color);
     void AddTriangle(Vec2 a, Vec2 b, Vec2 c, Color color);
     void AddLine(Vec2 a, Vec2 b, Color color, f32 thickness = 1.0f);

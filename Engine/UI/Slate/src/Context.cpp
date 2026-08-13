@@ -396,8 +396,9 @@ bool Context::TextField(u64 id, const Rect& rect, std::string& text,
         if (m_keyEnd) m_caret = text.size();
     }
 
-    // Hairline border, field bg inside, token radius. Focus gets a 2px accent
-    // outline (never a fill) per the focus-ring convention.
+    // Hairline border, field bg inside, token radius. Focus gets a 2px
+    // accent outline (never a fill) per the focus-ring convention. The
+    // outline uses the rounded path so it hugs the field's corners.
     const f32 ringT = m_theme.border.hairline;
     const f32 focusT = m_theme.border.thick;
     bool focused = (m_focus == id);
@@ -405,8 +406,10 @@ bool Context::TextField(u64 id, const Rect& rect, std::string& text,
     m_draw.AddRectFilledRounded(rect.Inset(ringT, ringT), m_theme.fieldBg,
                                 std::max(0.0f, m_theme.radius.md - ringT));
     if (focused) {
-        m_draw.AddRectOutline(rect.Inset(focusT * 0.5f, focusT * 0.5f),
-                              m_theme.focusRing, focusT);
+        Rect fr = rect.Inset(focusT * 0.5f, focusT * 0.5f);
+        m_draw.AddRectOutlineRounded(fr, m_theme.focusRing, focusT,
+                                     std::max(0.0f, m_theme.radius.md -
+                                                     focusT * 0.5f));
     }
 
     // Input padding uses the spacing token (lg=12).
