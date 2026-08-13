@@ -144,10 +144,9 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
                      toggleR.y + (kBarH - 12.0f) * 0.5f, 12.0f, 12.0f},
                     chev, toggleHover ? t.text : t.textDim);
 
-    // Drop-down: drawn after the toolbar so it sits on top of the body.
-    if (m_filterMenuOpen) {
-        DrawFilterMenu(ui, toggleR);
-    }
+    // Drop-down: deferred to after the panes are drawn (see Draw) so it
+    // overlays the tree / grid instead of being painted over by them.
+    m_filterAnchor = toggleR;
 }
 
 void ContentBrowserPanel::DrawFilterMenu(Slate::Context& ui,
@@ -501,6 +500,12 @@ void ContentBrowserPanel::Draw(Slate::Context& ui, const Slate::Rect& body,
     DrawBreadcrumb(ui, breadcrumb);
     DrawTreePane(ui, treePane, ctx);
     DrawGridPane(ui, gridPane, ctx);
+
+    // Filter drop-down overlays the body panes — drawn last so the tree /
+    // grid (which paint solid backgrounds) don't cover it.
+    if (m_filterMenuOpen) {
+        DrawFilterMenu(ui, m_filterAnchor);
+    }
 }
 
 }  // namespace Luma::Editor::Panels

@@ -72,6 +72,9 @@ private:
     // filters is open. Toggled by the down/up chevron button inside the
     // search bar; dismissed by selection or outside-click.
     bool m_filterMenuOpen = false;
+    // Rect of the toggle button when the menu was last opened; the popup
+    // anchors below it. Refreshed by DrawToolbar each frame.
+    Slate::Rect m_filterAnchor{};
 
     // Loaded textures supplied by EditorScreen; 0 = not loaded. The sort
     // up/down PNGs are kept for API stability but the toolbar chevron is
