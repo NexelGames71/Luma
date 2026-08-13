@@ -18,16 +18,20 @@ Rect ZoneRect(const Rect& r, DockDir dir) {
 
 // One pod of the Luma dock compass: a rounded chip holding a mini-layout glyph
 // that previews where the panel lands (shaded half, or a tab strip for Center).
+// Token-driven: surface4 chip, outline border, accent on hover.
 void DrawDockPod(Context& ctx, const Rect& btn, DockDir dir, const Theme& t,
                  bool hovered) {
-    Color base = Color::RGBA(30, 34, 42, 240);
-    Color border = hovered ? t.accent : Color::RGBA(92, 100, 114, 255);
-    ctx.PanelRoundedBordered(btn, base, border, 9.0f, hovered ? 2.0f : 1.0f);
+    Color base = t.surface4;
+    Color border = hovered ? t.accent : t.outline;
+    ctx.PanelRoundedBordered(btn, base, border, t.radius.md,
+                             hovered ? t.border.thick : t.border.hairline);
 
     Rect g{btn.x + 9.0f, btn.y + 9.0f, btn.w - 18.0f, btn.h - 18.0f};
-    ctx.PanelRounded(g, Color::RGBA(255, 255, 255, hovered ? 26 : 16), 3.0f);
+    Color innerTint = hovered ? Color::RGBA(255, 255, 255, 26)
+                              : Color::RGBA(255, 255, 255, 16);
+    ctx.PanelRounded(g, innerTint, t.radius.sm);
 
-    Color shade = hovered ? t.accent : Color::RGBA(90, 150, 220, 200);
+    Color shade = hovered ? t.accent : t.accentMuted;
     Rect s = g;
     switch (dir) {
         case DockDir::Left:  s.w = g.w * 0.5f; break;
@@ -37,8 +41,7 @@ void DrawDockPod(Context& ctx, const Rect& btn, DockDir dir, const Theme& t,
         case DockDir::Center: s.h = 4.0f; break;  // tab strip = tabify
     }
     ctx.Panel(s, shade);
-    ctx.PanelRoundedBordered(g, Color::RGBA(0, 0, 0, 0),
-                             Color::RGBA(210, 216, 226, 255), 3.0f, 1.0f);
+    ctx.PanelRoundedBordered(g, Color{}, t.outline, t.radius.sm, 1.0f);
 }
 }  // namespace
 

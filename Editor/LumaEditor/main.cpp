@@ -165,7 +165,7 @@ int main(int argc, char** argv) {
     type.headingSize = 14.0f;
     type.titleSize = 22.0f;
     type.displaySize = 32.0f;
-    if (!ui.Init(*renderer, type)) {
+    if (!ui.Init(*renderer, type, window->ContentScale())) {
         LUMA_LOG_ERROR("Editor", "failed to load UI font");
     }
     // Window icon from the engine icon asset.

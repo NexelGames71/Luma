@@ -199,6 +199,15 @@ void GlfwWindow::SetIcon(u32 width, u32 height, const void* rgba8Pixels) {
 
 void* GlfwWindow::NativeHandle() const { return m_window; }
 
+f32 GlfwWindow::ContentScale() const {
+    if (!m_window) return 1.0f;
+    float x = 1.0f, y = 1.0f;
+    glfwGetWindowContentScale(m_window, &x, &y);
+    // Use the average of x/y — most platforms report them equal; keep the
+    // value uniform so Slate doesn't split-hair between axes.
+    return 0.5f * (x + y);
+}
+
 std::vector<const char*> GlfwWindow::RequiredVulkanInstanceExtensions() const {
     u32 count = 0;
     const char** extensions = glfwGetRequiredInstanceExtensions(&count);

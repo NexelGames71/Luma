@@ -149,6 +149,70 @@ void DrawList::AddRectOutline(const Rect& rect, Color color, f32 t) {
     AddRectFilled(Rect{rect.Right() - t, rect.y, t, rect.h}, color);        // right
 }
 
+void DrawList::AddLine(Vec2 a, Vec2 b, Color color, f32 thickness) {
+    // Axis-aligned (or near-axis) lines collapse to rects. Diagonal lines are
+    // rasterized as a thin rotated quad. For our purposes (icons, splitters,
+    // gizmo strokes) most lines are short and not pixel-perfect — a quad is
+    // fine.
+    Vec2 delta{b.x - a.x, b.y - a.y};
+    f32 len = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+    if (len < 1e-3f || thickness <= 0.0f) {
+        // Degenerate: draw a 1px dot.
+        AddRectFilled({a.x, a.y, 1.0f, 1.0f}, color);
+        return;
+    }
+    if (std::fabs(delta.y) < 1e-4f) {
+        AddRectFilled({std::min(a.x, b.x), a.y - thickness * 0.5f,
+                       len, thickness},
+                      color);
+        return;
+    }
+    if (std::fabs(delta.x) < 1e-4f) {
+        AddRectFilled({a.x - thickness * 0.5f, std::min(a.y, b.y),
+                       thickness, len},
+                      color);
+        return;
+    }
+    // Rotated quad: four corners around the line.
+    Vec2 n{-delta.y / len, delta.x / len};
+    f32 h = thickness * 0.5f;
+    Vec2 p0{a.x + n.x * h, a.y + n.y * h};
+    Vec2 p1{a.x - n.x * h, a.y - n.y * h};
+    Vec2 p2{b.x - n.x * h, b.y - n.y * h};
+    Vec2 p3{b.x + n.x * h, b.y + n.y * h};
+    Vec2 pts[4] = {p0, p1, p2, p3};
+    AddConvexPolyFilled(pts, 4, color);
+}
+
+void DrawList::AddCircleFilled(Vec2 center, f32 radius, Color color,
+                               int segments) {
+    if (segments < 3) segments = 3;
+    std::vector<Vec2> pts(static_cast<usize>(segments));
+    for (int i = 0; i < segments; ++i) {
+        f32 a = (static_cast<f32>(i) / segments) * kPi * 2.0f;
+        pts[static_cast<usize>(i)] = {center.x + std::cos(a) * radius,
+                                       center.y + std::sin(a) * radius};
+    }
+    AddConvexPolyFilled(pts.data(), segments, color);
+}
+
+void DrawList::AddRectShadow(const Rect& rect, f32 radius, f32 intensity,
+                             f32 spread) {
+    if (spread <= 0.0f || intensity <= 0.0f) return;
+    constexpr int kLayers = 4;
+    // Each layer is a slightly larger rounded rect with falling alpha. The
+    // first layer hugs the source rect so the shadow feels "attached".
+    for (int i = 0; i < kLayers; ++i) {
+        f32 t = static_cast<f32>(i + 1) / static_cast<f32>(kLayers);
+        f32 pad = spread * t;
+        f32 alpha = intensity * (1.0f - t) * (1.0f / kLayers) * 4.0f;
+        u8 a = static_cast<u8>(std::clamp(alpha * 255.0f, 0.0f, 255.0f) + 0.5f);
+        Rect r{rect.x - pad, rect.y - pad, rect.w + 2.0f * pad,
+               rect.h + 2.0f * pad};
+        AddRectFilledRounded(r, Color::RGBA(0, 0, 0, a), radius + pad);
+    }
+}
+
 void DrawList::AddImage(TextureHandle texture, const Rect& dst, const Rect& uv,
                         Color tint) {
     AddQuad(texture, dst, uv, tint);

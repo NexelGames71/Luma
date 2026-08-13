@@ -25,6 +25,7 @@ public:
 
     u32 Width() const override { return m_data.width; }
     u32 Height() const override { return m_data.height; }
+    f32 ContentScale() const override;
     void SetIcon(u32 width, u32 height, const void* rgba8Pixels) override;
     void SetCursor(CursorShape shape) override;
     void* NativeHandle() const override;

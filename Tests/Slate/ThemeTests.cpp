@@ -120,3 +120,16 @@ TEST_CASE("Mix is order-independent at t=0.5 (rounded)", "[slate][theme][helpers
     REQUIRE(ab.g == ba.g);
     REQUIRE(ab.b == ba.b);
 }
+
+TEST_CASE("Typography default-initializes a coherent scale",
+          "[slate][theme][type]") {
+    Typography t;
+    // Sizes must be ascending or stable so widgets that pull from the scale
+    // don't invert hierarchy by accident.
+    REQUIRE(t.captionSize <= t.bodySize);
+    REQUIRE(t.bodySize <= t.bodyStrongSize);
+    REQUIRE(t.bodyStrongSize <= t.headingSize);
+    REQUIRE(t.headingSize <= t.titleSize);
+    REQUIRE(t.titleSize <= t.displaySize);
+    REQUIRE(t.lineHeightMul >= 1.0f);
+}

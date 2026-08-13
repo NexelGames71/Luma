@@ -36,6 +36,12 @@ public:
     virtual u32 Width() const = 0;
     virtual u32 Height() const = 0;
 
+    // Per-monitor content scale (DPI factor). 1.0 on standard 96 DPI displays;
+    // ~1.5 / 2.0 / 2.5 on hi-DPI displays. The Slate UI multiplies its design
+    // sizes by this value so the product stays crisp on any monitor. Returns
+    // 1.0 if the backend can't query it (e.g. headless / unknown platform).
+    virtual f32 ContentScale() const = 0;
+
     // Sets the window/taskbar icon from tightly-packed RGBA8 pixels.
     virtual void SetIcon(u32 width, u32 height, const void* rgba8Pixels) = 0;
 

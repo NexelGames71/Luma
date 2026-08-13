@@ -15,6 +15,10 @@ class DrawList {
 public:
     void Begin(f32 displayWidth, f32 displayHeight);
 
+    // Live counts (pre-Build) for tests + advanced widgets.
+    usize vertexCount() const { return m_vertices.size(); }
+    usize indexCount() const { return m_indices.size(); }
+
     void PushClip(Rect clip);
     void PopClip();
 
@@ -24,6 +28,15 @@ public:
     void AddRectOutline(const Rect& rect, Color color, f32 thickness = 1.0f);
     void AddConvexPolyFilled(const Vec2* points, int count, Color color);
     void AddTriangle(Vec2 a, Vec2 b, Vec2 c, Color color);
+    void AddLine(Vec2 a, Vec2 b, Color color, f32 thickness = 1.0f);
+    // Approximated with a regular polygon (default 24 segments).
+    void AddCircleFilled(Vec2 center, f32 radius, Color color,
+                         int segments = 24);
+    // Soft shadow: N stacked, progressively larger, translucent rounded rects.
+    // `intensity` 0..1 modulates alpha; `radius` matches the receiver's corner
+    // radius; `spread` is the outer reach in px (e.g. 6 = subtle lift).
+    void AddRectShadow(const Rect& rect, f32 radius, f32 intensity = 0.5f,
+                       f32 spread = 6.0f);
     void AddImage(TextureHandle texture, const Rect& dst, const Rect& uv,
                   Color tint);
     void AddText(const Font& font, Vec2 pos, std::string_view text, Color color);

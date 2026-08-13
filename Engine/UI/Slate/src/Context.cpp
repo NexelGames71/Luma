@@ -24,22 +24,26 @@ bool Context::Init(Renderer& renderer, const std::string& fontPath,
                    const std::string& titleFontPath, f32 baseSize,
                    f32 titleSize, const std::string& uiFontPath, f32 uiSize,
                    const std::string& mediumFontPath, f32 mediumSize,
-                   const std::string& monoFontPath, f32 monoSize) {
+                   const std::string& monoFontPath, f32 monoSize,
+                   f32 dpiScale) {
+    m_dpiScale = dpiScale > 0.0f ? dpiScale : 1.0f;
     const std::string& titlePath =
         titleFontPath.empty() ? fontPath : titleFontPath;
     const std::string& uiPath = uiFontPath.empty() ? titlePath : uiFontPath;
     const std::string& mediumPath =
         mediumFontPath.empty() ? uiPath : mediumFontPath;
     const std::string& monoPath = monoFontPath.empty() ? fontPath : monoFontPath;
-    bool ok = m_font.LoadFromFile(renderer, fontPath, baseSize);
-    ok = m_titleFont.LoadFromFile(renderer, titlePath, titleSize) && ok;
-    ok = m_uiFont.LoadFromFile(renderer, uiPath, uiSize) && ok;
-    ok = m_mediumFont.LoadFromFile(renderer, mediumPath, mediumSize) && ok;
-    ok = m_monoFont.LoadFromFile(renderer, monoPath, monoSize) && ok;
+    const f32 s = m_dpiScale;
+    bool ok = m_font.LoadFromFile(renderer, fontPath, baseSize * s);
+    ok = m_titleFont.LoadFromFile(renderer, titlePath, titleSize * s) && ok;
+    ok = m_uiFont.LoadFromFile(renderer, uiPath, uiSize * s) && ok;
+    ok = m_mediumFont.LoadFromFile(renderer, mediumPath, mediumSize * s) && ok;
+    ok = m_monoFont.LoadFromFile(renderer, monoPath, monoSize * s) && ok;
     return ok;
 }
 
-bool Context::Init(Renderer& renderer, const Typography& type) {
+bool Context::Init(Renderer& renderer, const Typography& type, f32 dpiScale) {
+    m_dpiScale = dpiScale > 0.0f ? dpiScale : 1.0f;
     // Persist the typography on the theme so widgets can read sizes/weights
     // from `theme().type` (design-token source of truth).
     m_theme.type = type;
@@ -53,12 +57,14 @@ bool Context::Init(Renderer& renderer, const Typography& type) {
     const std::string& mono = type.mono.empty() ? reg : type.mono;
 
     // Map design roles to Slate's internal font slots. Sizes come from the
-    // typography scale so the whole product stays consistent.
-    bool ok = m_font.LoadFromFile(renderer, reg, type.bodySize);
-    ok = m_mediumFont.LoadFromFile(renderer, med, type.captionSize) && ok;
-    ok = m_uiFont.LoadFromFile(renderer, sb, type.headingSize) && ok;
-    ok = m_titleFont.LoadFromFile(renderer, bd, type.titleSize) && ok;
-    ok = m_monoFont.LoadFromFile(renderer, mono, type.captionSize) && ok;
+    // typography scale so the whole product stays consistent. Bake at
+    // pixelSize * dpiScale so glyphs stay crisp on hi-DPI displays.
+    const f32 s = m_dpiScale;
+    bool ok = m_font.LoadFromFile(renderer, reg, type.bodySize * s);
+    ok = m_mediumFont.LoadFromFile(renderer, med, type.captionSize * s) && ok;
+    ok = m_uiFont.LoadFromFile(renderer, sb, type.headingSize * s) && ok;
+    ok = m_titleFont.LoadFromFile(renderer, bd, type.titleSize * s) && ok;
+    ok = m_monoFont.LoadFromFile(renderer, mono, type.captionSize * s) && ok;
     return ok;
 }
 
@@ -111,6 +117,7 @@ void Context::BeginFrame(f32 displayWidth, f32 displayHeight, f32 dt) {
     m_mouseDelta = {m_mouse.x - m_prevMouse.x, m_mouse.y - m_prevMouse.y};
     m_prevMouse = m_mouse;
     m_draw.Begin(displayWidth, displayHeight);
+    ++m_frame;
 }
 
 const UIDrawData& Context::EndFrame() {
@@ -123,7 +130,26 @@ const UIDrawData& Context::EndFrame() {
     m_keyBackspace = m_keyDelete = m_keyLeft = m_keyRight = false;
     m_keyHome = m_keyEnd = m_keyEnter = false;
     m_scroll = 0.0f;
+    // Evict stale animation entries so the map doesn't grow unbounded.
+    for (auto it = m_anim.begin(); it != m_anim.end();) {
+        if (m_frame - it->second.lastTouch > kAnimGcAge) {
+            it = m_anim.erase(it);
+        } else {
+            ++it;
+        }
+    }
     return m_draw.Build();
+}
+
+f32 Context::Animate(u64 id, bool active, f32 speed) {
+    AnimState& s = m_anim[id];
+    s.lastTouch = m_frame;
+    f32 target = active ? 1.0f : 0.0f;
+    // Exponential lerp: per-second rate, frame-rate independent.
+    f32 k = 1.0f - std::exp(-speed * 0.0166f);  // assumes ~60 fps; close enough
+    s.value += (target - s.value) * k;
+    if (std::fabs(s.value - target) < 1e-4f) s.value = target;
+    return s.value;
 }
 
 void Context::Panel(const Rect& rect, Color color) {
@@ -246,15 +272,17 @@ bool Context::Button(u64 id, const Rect& rect, std::string_view label) {
         m_active = 0;
     }
 
-    // Rest state from the surface ramp; press is a deliberate darken so the
-    // user gets physical feedback even when the cursor hasn't moved.
-    Color bg = m_theme.button;
-    if (m_active == id) bg = Darken(m_theme.button, 0.06f);
-    else if (hovered) bg = m_theme.buttonHover;
+    // Subtle hover fade-in via Animate: lerp the button fill toward hover
+    // colour while hovered, back to rest when not. Speed from the motion
+    // token so hover fades are consistent across the product.
+    f32 hoverT = Animate(id ^ 0xBEEFCAFEull, hovered, m_theme.motion.hover);
+    Color rest = m_theme.button;
+    Color bg = Mix(rest, m_theme.buttonHover, hoverT);
+    if (m_active == id) bg = Darken(bg, 0.06f);
     m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
 
     // Focus ring: an accent outline that appears whenever the button is
-    // keyboard-focused or held down (mirrors the focus contract from §1.7).
+    // held down (mirrors the focus contract from the design spec).
     if (m_active == id) {
         m_draw.AddRectOutline(rect, m_theme.focusRing,
                               m_theme.border.thick);
@@ -414,12 +442,14 @@ bool Context::Card(u64 id, const Rect& rect, std::string_view title,
 
     // Three-state fill: selected (accentMuted) > hover (surface3) > rest
     // (surface2). Border is hairline by default and a 2px accent when selected.
+    // A subtle E1 shadow grounds the card against the panel.
     Color bg = selected
                    ? m_theme.cardSelected
                    : (hovered ? m_theme.cardHover : m_theme.cardBg);
     const f32 borderT = selected ? m_theme.border.thick
                                  : m_theme.border.hairline;
     Color border = selected ? m_theme.accent : m_theme.outline;
+    m_draw.AddRectShadow(rect, m_theme.radius.md, 0.20f, 5.0f);
     m_draw.AddRectFilledRounded(rect, border, m_theme.radius.md);
     m_draw.AddRectFilledRounded(rect.Inset(borderT, borderT), bg,
                                 std::max(0.0f, m_theme.radius.md - borderT));
@@ -730,8 +760,10 @@ bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
 Rect Context::PanelWithTitle(const Rect& rect, std::string_view title) {
     // Flush docked panel with an active tab (Unity/Unreal style): a surface2
     // header strip with a tab chip that matches the body, an accent underline
-    // on the title, and a hairline separator between header and body.
+    // on the title, and a hairline separator between header and body. A
+    // subtle E1 shadow lifts the panel off the window surface.
     const f32 headerH = 28.0f;
+    m_draw.AddRectShadow(rect, m_theme.radius.md, 0.18f, 4.0f);
     m_draw.AddRectFilled(rect, m_theme.panelBg);
     m_draw.AddRectFilled({rect.x, rect.y, rect.w, headerH}, m_theme.header);
 

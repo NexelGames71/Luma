@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include "Luma/Platform/Cursor.h"
 #include "Luma/RHI/Renderer.h"
@@ -33,13 +34,16 @@ public:
               f32 titleSize = 30.0f, const std::string& uiFontPath = {},
               f32 uiSize = 15.0f, const std::string& mediumFontPath = {},
               f32 mediumSize = 12.5f,
-              const std::string& monoFontPath = {}, f32 monoSize = 13.0f);
+              const std::string& monoFontPath = {}, f32 monoSize = 13.0f,
+              f32 dpiScale = 1.0f);
 
     // Preferred entry: load the font chain from a Theme::Typography struct so
     // weights, sizes, and family paths are all driven by the design system.
     // Empty string fields fall back to the previous weight in the chain
-    // (semiBold -> medium -> regular).
-    bool Init(Renderer& renderer, const Typography& type);
+    // (semiBold -> medium -> regular). `dpiScale` (default 1.0) multiplies
+    // every pixel size in `type` before baking the atlases so the product
+    // stays crisp on hi-DPI displays without changing the design tokens.
+    bool Init(Renderer& renderer, const Typography& type, f32 dpiScale = 1.0f);
 
     // --- Input feed (call from the app's event callback) --------------------
     void OnMouseMove(f32 x, f32 y);
@@ -51,6 +55,13 @@ public:
     // --- Frame --------------------------------------------------------------
     void BeginFrame(f32 displayWidth, f32 displayHeight, f32 dt);
     const UIDrawData& EndFrame();
+
+    // Animates 0..1 toward `active ? 1 : 0` with an exponential lerp at
+    // `speed` per second. State is keyed by `id` so multiple independent
+    // animations can coexist (hover fades, popup reveals, etc.). Returns
+    // the current value. Each frame, ids that haven't been touched in
+    // kAnimGcAge frames are evicted from the map.
+    f32 Animate(u64 id, bool active, f32 speed);
 
     // --- Widgets ------------------------------------------------------------
     void Panel(const Rect& rect, Color color);
@@ -122,6 +133,16 @@ public:
     Font& uiFont() { return m_uiFont; }
     Font& mediumFont() { return m_mediumFont; }
     Font& monoFont() { return m_monoFont; }
+
+    // DPI scale the context was initialized with. Token sizes in widgets
+    // multiply by this where crispness matters (icons, control heights,
+    // focus rings); it doesn't re-bake fonts (they were baked at scale).
+    f32 dpiScale() const { return m_dpiScale; }
+
+    // Underlying draw list. Exposed for advanced widgets and icons that need
+    // to emit raw geometry between BeginFrame/EndFrame.
+    DrawList& drawList() { return m_draw; }
+    const DrawList& drawList() const { return m_draw; }
     Vec2 mouse() const { return m_mouse; }
     Vec2 mouseDelta() const { return m_mouseDelta; }
     f32 scrollDelta() const { return m_scroll; }
@@ -151,6 +172,7 @@ private:
     Font m_mediumFont;
     Font m_monoFont;
     Theme m_theme = DarkTheme();
+    f32 m_dpiScale = 1.0f;
 
     Vec2 m_mouse;
     Vec2 m_prevMouse;
@@ -172,6 +194,13 @@ private:
     f32 m_time = 0.0f;
     f32 m_displayW = 0.0f;
     f32 m_displayH = 0.0f;
+
+    // Per-id animation values (0..1). Each entry tracks the value plus the
+    // last frame it was touched so stale entries can be GC'd.
+    struct AnimState { f32 value = 0.0f; u32 lastTouch = 0; };
+    std::unordered_map<u64, AnimState> m_anim;
+    u32 m_frame = 0;
+    static constexpr u32 kAnimGcAge = 120;  // evict after ~2s untouched
 };
 
 }  // namespace Luma::Slate
