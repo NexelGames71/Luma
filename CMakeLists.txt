@@ -63,6 +63,12 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/Engine/Math/CMakeLists.txt)
 endif()
 
 # Later modules are added as they come online (keeps every milestone buildable).
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/Engine/Serialization/CMakeLists.txt)
+    add_subdirectory(Engine/Serialization)
+endif()
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/Engine/VFS/CMakeLists.txt)
+    add_subdirectory(Engine/VFS)
+endif()
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/Engine/Rendering/RHI/CMakeLists.txt)
     add_subdirectory(Engine/Rendering/RHI)
 endif()

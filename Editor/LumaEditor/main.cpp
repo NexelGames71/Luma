@@ -14,6 +14,8 @@
 #include "Luma/RHI/VulkanRenderer.h"
 #include "Luma/Slate/Context.h"
 #include "Luma/Slate/Image.h"
+#include "Luma/VFS/Path.h"
+#include "Luma/VFS/VFS.h"
 
 #include "EditorScreen.h"
 #include "SplashScreen.h"
@@ -22,17 +24,17 @@ using namespace Luma;
 
 namespace {
 
-// Finds an editor asset (e.g. logo) by searching Content/Editor upward from the
-// working directory.
+// Resolves an editor asset (e.g. "Fonts/Inter-Regular.ttf") through the VFS
+// using the Content root. Returns the absolute filesystem path or an empty
+// string if the asset doesn't exist.
 std::string FindEditorAsset(const std::string& file) {
-    const char* prefixes[] = {"Content/Editor/", "../Content/Editor/",
-                              "../../Content/Editor/",
-                              "../../../Content/Editor/"};
-    for (const char* p : prefixes) {
-        std::string candidate = std::string(p) + file;
-        if (std::filesystem::exists(candidate)) return candidate;
-    }
-    return {};
+    auto& vfs = Luma::VFS::VFS::Global();
+    if (!vfs.IsMounted(Luma::VFS::Root::Content)) return {};
+    Luma::VFS::Path p(Luma::VFS::Root::Content, "Editor/" + file);
+    if (!vfs.Exists(p)) return {};
+    auto real = vfs.TryResolve(p);
+    if (!real) return {};
+    return real->string();
 }
 
 // Feeds a window event into the Slate context (and reports window close).
@@ -93,6 +95,24 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Touch the VFS and (in editor mode) remount Project/Saved/Intermediate
+    // under the active project so project-relative content and logs resolve
+    // through the same paths.
+    {
+        auto& vfs = Luma::VFS::VFS::Global();
+        if (editorMode && !projectFile.empty()) {
+            auto projectRoot = Luma::VFS::ProjectRootFromFile(projectFile);
+            if (!projectRoot.empty()) {
+                vfs.Mount(Luma::VFS::Root::Project, projectRoot);
+                vfs.Mount(Luma::VFS::Root::Saved, projectRoot / "Saved");
+                vfs.Mount(Luma::VFS::Root::Intermediate,
+                          projectRoot / "Saved" / "Intermediate");
+                LUMA_LOG_INFO("Editor", "mounted project at {}",
+                              projectRoot.string());
+            }
+        }
+    }
+
     WindowProps props;
     props.title = editorMode ? "Luma Editor" : "Luma - Project Browser";
     props.width = editorMode ? 1360u : 900u;
@@ -104,19 +124,50 @@ int main(int argc, char** argv) {
     rc.vsync = true;
     std::unique_ptr<Renderer> renderer = CreateVulkanRenderer(*window, rc);
 
-    // Fonts: Open Sans (bundled) - Regular for body, SemiBold for UI headings /
-    // tabs / buttons, Bold for large titles. Falls back to Segoe UI.
-    std::string bodyFont = FindEditorAsset("Fonts/OpenSans-Regular.ttf");
-    std::string uiFont = FindEditorAsset("Fonts/OpenSans-SemiBold.ttf");
-    std::string titleFont = FindEditorAsset("Fonts/OpenSans-Bold.ttf");
-    if (bodyFont.empty()) bodyFont = "C:/Windows/Fonts/segoeui.ttf";
-    if (uiFont.empty()) uiFont = bodyFont;
-    if (titleFont.empty()) titleFont = uiFont;
-    Slate::Context ui;
-    if (!ui.Init(*renderer, bodyFont, titleFont, 16.0f, 30.0f, uiFont, 15.0f)) {
+    // Fonts: Inter (bundled) is the primary UI family. The four weights below
+    // map onto Slate's design roles:
+    //   uiRegular -> body / default text
+    //   uiMedium  -> captions / hint text / weaker emphasis
+    //   uiSemiBold-> section headings, tab titles, button labels
+    //   uiBold    -> titles, splash, large display
+    //   mono      -> console output, logs, code
+    // If Inter can't be located, fall back to Segoe UI (regular/medium/semibold
+    // /bold) on Windows so the editor still boots. Consolas is the mono fallback.
+    auto fontPathOr = [](const std::string& primary, const char* fallback) {
+        return primary.empty() ? std::string(fallback) : primary;
+    };
+    std::string bodyFont = fontPathOr(
+        FindEditorAsset("Fonts/Inter-Regular.ttf"), "C:/Windows/Fonts/segoeui.ttf");
+    std::string mediumFont = fontPathOr(
+        FindEditorAsset("Fonts/Inter-Medium.ttf"),
+        bodyFont.c_str());  // collapse: regular covers medium if missing
+    std::string uiFont = fontPathOr(
+        FindEditorAsset("Fonts/Inter-SemiBold.ttf"),
+        bodyFont.c_str());
+    std::string titleFont = fontPathOr(
+        FindEditorAsset("Fonts/Inter-Bold.ttf"),
+        "C:/Windows/Fonts/segoeui.ttf");
+    std::string monoFont =
+        "C:/Windows/Fonts/consola.ttf";  // always present on Windows
+
+    Slate::Context ui;  // owns the loaded fonts + theme tokens
+    // Build the typography scale on the theme. Sizes are tuned for a 96 DPI
+    // baseline; will scale crisply with the renderer's DPI factor.
+    Slate::Typography& type = ui.theme().type;
+    type.uiRegular = bodyFont;
+    type.uiMedium = mediumFont;
+    type.uiSemiBold = uiFont;
+    type.uiBold = titleFont;
+    type.mono = monoFont;
+    type.captionSize = 12.5f;
+    type.bodySize = 14.0f;
+    type.bodyStrongSize = 14.0f;
+    type.headingSize = 14.0f;
+    type.titleSize = 22.0f;
+    type.displaySize = 32.0f;
+    if (!ui.Init(*renderer, type)) {
         LUMA_LOG_ERROR("Editor", "failed to load UI font");
     }
-
     // Window icon from the engine icon asset.
     {
         std::string iconPath = FindEditorAsset("luma_icon.png");

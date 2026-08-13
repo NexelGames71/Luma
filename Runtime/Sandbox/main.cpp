@@ -13,6 +13,8 @@
 #include "Luma/Platform/Window.h"
 #include "Luma/RHI/Renderer.h"
 #include "Luma/RHI/VulkanRenderer.h"
+#include "Luma/VFS/Path.h"
+#include "Luma/VFS/VFS.h"
 
 #include "SandboxLayer.h"
 
@@ -20,20 +22,24 @@ using namespace Luma;
 
 namespace {
 
-// Best-effort config load; searches upward so it works whether launched from the
-// repo root or from build/bin/<Config>/.
+// Loads Engine.ini through the VFS. The Engine root is auto-detected at
+// startup (env var, exe parent, or by walking up from CWD looking for the
+// repo's CMakeLists.txt). Returns a default Config if the file is missing.
 Config LoadEngineConfig() {
     Config cfg;
-    const char* candidates[] = {
-        "Config/Engine.ini", "../Config/Engine.ini", "../../Config/Engine.ini",
-        "../../../Config/Engine.ini"};
-    for (const char* path : candidates) {
-        if (cfg.LoadFromFile(path)) {
-            LUMA_LOG_INFO("Boot", "loaded config: {}", path);
+    auto& vfs = VFS::VFS::Global();
+    Luma::VFS::Path iniPath(Luma::VFS::Root::Config, "Engine.ini");
+    if (auto text = vfs.ReadText(iniPath)) {
+        if (cfg.LoadFromString(*text)) {
+            LUMA_LOG_INFO("Boot", "loaded config: {}", iniPath.ToString());
             return cfg;
         }
+        LUMA_LOG_WARN("Boot", "failed to parse {}; using built-in defaults",
+                      iniPath.ToString());
+    } else {
+        LUMA_LOG_WARN("Boot", "{} not found; using built-in defaults",
+                      iniPath.ToString());
     }
-    LUMA_LOG_WARN("Boot", "no Engine.ini found; using built-in defaults");
     return cfg;
 }
 
@@ -41,8 +47,18 @@ Config LoadEngineConfig() {
 
 int main() {
     Log::Init(LogLevel::Trace);
-    std::error_code ec;
-    std::filesystem::create_directories("Saved/Logs", ec);
+
+    // Touch the VFS first so it mounts Engine/ before anything else needs it.
+    auto& vfs = Luma::VFS::VFS::Global();
+    LUMA_LOG_INFO("Boot", "engine root: {}",
+                  vfs.IsMounted(Luma::VFS::Root::Engine)
+                      ? vfs.RootPath(Luma::VFS::Root::Engine).string()
+                      : "<unmounted>");
+
+    // Make sure the log directory exists under the Saved root.
+    if (vfs.IsMounted(Luma::VFS::Root::Saved)) {
+        vfs.CreateDirectories(Luma::VFS::Path(Luma::VFS::Root::Saved, "Logs"));
+    }
     Log::AddSink(Log::MakeFileSink("Saved/Logs/Luma.log"));
 
     LUMA_LOG_INFO("Boot", "starting {}", EngineVersionString());
