@@ -11,6 +11,7 @@ target_include_directories(LumaPanelContentBrowser
         ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 
 target_link_libraries(LumaPanelContentBrowser
-    PUBLIC Luma::Core Luma::Asset Luma::Scene Luma::Slate)
+    PUBLIC Luma::Core Luma::Asset Luma::Scene Luma::Slate
+           Luma::PanelFileSystemTree)
 
 set_target_properties(LumaPanelContentBrowser PROPERTIES FOLDER "Editor/Panels")

@@ -28,15 +28,18 @@ void ContentBrowserPanel::SetIcons(Luma::TextureHandle sortUp,
     m_texFolder = folder;
     m_texReload = reload;
     m_texImport = importTex;
+    m_tree.SetFolderTexture(folder);
 }
 
 void ContentBrowserPanel::ResetNavigation() {
     m_currentFolder.clear();
+    m_tree.SetSelectedFolder({});
     m_selected = AssetId{};
 }
 
 void ContentBrowserPanel::NavigateTo(const std::filesystem::path& folder) {
     m_currentFolder = folder.lexically_normal();
+    m_tree.SetSelectedFolder(m_currentFolder);
 }
 
 void ContentBrowserPanel::NavigateUp() {
@@ -444,70 +447,8 @@ void ContentBrowserPanel::DrawFilterMenu(Slate::Context& ui,
         ui.LabelIn({row.x + 44.0f, row.y + (kMenuRowH - ts.y) * 0.5f,
                     row.w - 52.0f, kMenuRowH},
                    it.label,
-                   isActive ? t.selectionText : t.text,
-                    Slate::Align::Left);
-    }
-}
-
-void ContentBrowserPanel::DrawTreePane(Slate::Context& ui,
-                                       const Slate::Rect& rect,
-                                       PanelContext& /*ctx*/) {
-    Slate::Theme& t = ui.theme();
-    ui.Panel(rect, t.surface0);
-    ui.Panel({rect.Right() - 1.0f, rect.y, 1.0f, rect.h}, t.separator);
-
-    // Header.
-    ui.Heading({rect.x + 12.0f, rect.y + 8.0f, rect.w - 24.0f, 22.0f},
-               "Folders", t.text);
-
-    // Tree rows: for each root, recursively expand one level. Keeps the
-    // implementation small; full recursive expand-on-click is a future
-    // enhancement. Folder icons use the supplied folder PNG tinted
-    // orange; fall back to the procedural Icon::Folder glyph when the
-    // texture didn't load.
-    f32 y = rect.y + 36.0f;
-    if (!m_registry) return;
-    // Orange tint applied to the white folder PNG.
-    const Slate::Color kFolderOrange{255, 178, 92, 255};
-    constexpr f32 kIconSize = 16.0f;
-    auto drawFolderIcon = [&](f32 x, f32 y) {
-        Rect ir{x, y + (kRowH - kIconSize) * 0.5f, kIconSize, kIconSize};
-        if (m_texFolder) {
-            ui.Image(m_texFolder, ir, kFolderOrange);
-        } else {
-            Slate::DrawIcon(ui, ir, Icon::Folder, kFolderOrange);
-        }
-    };
-    for (const auto& root : m_registry->Roots()) {
-        // Display label for the root is "Content" (the conventional name of
-        // the registered root). Filename is used as a fallback when the
-        // registry was wired with a non-Content root.
-        std::string name = root.filename().string();
-        if (name.empty() || name == "Content") name = "Content";
-        Rect r{rect.x + 8.0f, y, rect.w - 16.0f, kRowH};
-        bool sel = m_currentFolder.empty() || m_currentFolder == root;
-        if (ui.Selectable(Slate::Context::ID(root.string().c_str()), r,
-                          name, sel)) {
-            m_currentFolder = root;
-        }
-        drawFolderIcon(r.x + 4.0f, r.y);
-        y += kRowH + 2.0f;
-        // Show direct child folders of this root.
-        if (sel) {
-            auto children = m_registry->FilterByDirectory(root);
-            for (const auto* child : children) {
-                if (!child->IsFolder()) continue;
-                Rect cr{rect.x + 24.0f, y, rect.w - 32.0f, kRowH};
-                bool csel = (m_currentFolder == child->packagePath);
-                if (ui.Selectable(
-                        Slate::Context::ID(child->packagePath.string().c_str()),
-                        cr, child->assetName, csel)) {
-                    m_currentFolder = child->packagePath;
-                }
-                drawFolderIcon(cr.x + 4.0f, cr.y);
-                y += kRowH + 2.0f;
-            }
-        }
+                    isActive ? t.selectionText : t.text,
+                     Slate::Align::Left);
     }
 }
 
@@ -600,9 +541,9 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
 
 void ContentBrowserPanel::Draw(Slate::Context& ui, const Slate::Rect& body,
                                PanelContext& ctx) {
+    Slate::Theme& t = ui.theme();
     if (!m_registry) {
         // Registry not wired yet — show a hint and return.
-        Slate::Theme& t = ui.theme();
         ui.Panel(body, t.windowBg);
         ui.LabelIn({body.x, body.y + body.h * 0.5f - 11.0f, body.w, 22.0f},
                    "Content Browser: no asset registry wired.", t.textDim,
@@ -611,12 +552,28 @@ void ContentBrowserPanel::Draw(Slate::Context& ui, const Slate::Rect& body,
     }
     Rect toolbar{body.x, body.y, body.w, kToolbarH};
     f32 bodyTop = toolbar.Bottom();
-    Rect treePane{body.x, bodyTop, kTreePaneW, body.Bottom() - bodyTop};
-    Rect gridPane{treePane.Right(), bodyTop, body.w - kTreePaneW,
-                  body.Bottom() - bodyTop};
+    // The content-browser body sits on a slightly lighter surface so the
+    // dark tree panel reads as an inset panel "inside" the browser,
+    // surrounded by a margin rather than flush with the edges.
+    Rect bodyArea{body.x, bodyTop, body.w, body.Bottom() - bodyTop};
+    ui.Panel(bodyArea, t.surface1);
+    constexpr f32 kTreeMargin = 6.0f;
+    Rect treePane{body.x + kTreeMargin, bodyTop + kTreeMargin,
+                 kTreePaneW - kTreeMargin,
+                 bodyArea.Bottom() - bodyTop - kTreeMargin * 2.0f};
+    Rect gridPane{treePane.Right() + kTreeMargin, bodyTop,
+                  body.w - treePane.Right() - kTreeMargin - kTreeMargin,
+                  bodyArea.Bottom() - bodyTop};
 
     DrawToolbar(ui, toolbar);
-    DrawTreePane(ui, treePane, ctx);
+    // Reusable FileSystemTreePanel handles the dark inset folder list.
+    // Keep its selection synced with our navigation state both ways.
+    m_tree.SetRegistry(m_registry);
+    m_tree.SetSelectedFolder(m_currentFolder);
+    m_tree.Draw(ui, treePane);
+    if (m_tree.SelectedFolder() != m_currentFolder) {
+        m_currentFolder = m_tree.SelectedFolder();
+    }
     DrawGridPane(ui, gridPane, ctx);
 
     // Filter drop-down overlays the body panes — drawn last so the tree /

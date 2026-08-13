@@ -18,7 +18,8 @@ target_link_libraries(LumaEditor
             Luma::Project Luma::ProjectBrowser Luma::Grid Luma::Scene
             Luma::Gizmo Luma::VFS Luma::Asset
             Luma::PanelWorldOutliner Luma::PanelViewport Luma::PanelInspector
-            Luma::PanelConsole Luma::PanelContentBrowser)
+            Luma::PanelConsole Luma::PanelContentBrowser
+            Luma::PanelFileSystemTree)
 
 set_target_properties(LumaEditor PROPERTIES
     OUTPUT_NAME "LumaEditor"

@@ -7,6 +7,7 @@
 #include "Luma/Asset/AssetData.h"
 #include "Luma/Asset/AssetId.h"
 #include "Luma/Asset/AssetRegistry.h"
+#include "Luma/Editor/Panels/FileSystemTree.h"
 #include "Luma/RHI/Renderer.h"
 #include "PanelContext.h"
 #include "Luma/Slate/Context.h"
@@ -71,6 +72,11 @@ private:
     std::optional<AssetType> m_typeFilter;  // nullopt = all
     AssetId m_selected{};
 
+    // Reusable folder tree (draws the dark inset "Folders" panel and
+    // reports the selected folder via OnFolderSelected). Kept in sync
+    // with m_currentFolder both ways.
+    FileSystemTreePanel m_tree;
+
     // Filter drop-down state: true while the popup listing asset-type
     // filters is open. Toggled by the down/up chevron button inside the
     // search bar; dismissed by selection or outside-click.
@@ -101,14 +107,11 @@ private:
     // Layout constants.
     static constexpr f32 kToolbarH = 36.0f;
     static constexpr f32 kTreePaneW = 220.0f;
-    static constexpr f32 kRowH = 24.0f;
     static constexpr f32 kTileSize = 80.0f;
     static constexpr f32 kTileGap = 8.0f;
 
     // Draw helpers (called from Draw).
     void DrawToolbar(Slate::Context& ui, const Slate::Rect& rect);
-    void DrawTreePane(Slate::Context& ui, const Slate::Rect& rect,
-                      PanelContext& ctx);
     void DrawGridPane(Slate::Context& ui, const Slate::Rect& rect,
                       PanelContext& ctx);
     // Draws the type-filter drop-down below `anchor`. No-op when
