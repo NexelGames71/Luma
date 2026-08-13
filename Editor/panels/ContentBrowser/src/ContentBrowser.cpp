@@ -168,10 +168,10 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     // same row, wrapped in a rounded "field" box that matches the search
     // bar's look. No folder icon; no hover/highlight on segments (the
     // text serves as the click target).
-    constexpr f32 kSegH = 20.0f;
     constexpr f32 kSegPadX = 8.0f;
     constexpr f32 kChevW = 16.0f;
-    constexpr f32 kBoxPad = 8.0f;  // left padding inside the box
+    constexpr f32 kBoxPad = 8.0f;   // left padding inside the box
+    constexpr f32 kBoxRightPad = 8.0f;  // right margin so text doesn't clip
     const Slate::Font& f = ui.uiFont();
     f32 bLeft = rect.x + 40.0f;
     f32 bRight = barX - kBarGap;
@@ -186,7 +186,11 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
 
     // Segment text cursor starts inside the box's left padding.
     f32 x = boxR.x + kBoxPad;
-    f32 yMid = rect.y + (rect.h - kSegH) * 0.5f;
+    // Segments are vertically centered in the box (full box height) so
+    // text sits dead-center, not biased high.
+    auto segRect = [&](f32 w) {
+        return Rect{x, boxR.y, w, boxR.h};
+    };
 
     // Clip the breadcrumb to the box interior so long paths can't bleed
     // across the search bar.
@@ -194,7 +198,7 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
 
     auto drawChevron = [&](f32 xPos) {
         Slate::DrawIcon(ui,
-                        {xPos, yMid + (kSegH - 10.0f) * 0.5f, 10.0f, 10.0f},
+                        {xPos, boxR.y + (boxR.h - 10.0f) * 0.5f, 10.0f, 10.0f},
                         Icon::ChevronRight, t.textDisabled);
     };
     // No-chrome segment: hit-test inline (no hover/active fill drawn) and
@@ -203,7 +207,14 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
                            const std::filesystem::path& target, bool isLast) {
         Vec2 ts = f.Measure(label);
         f32 segW = ts.x + kSegPadX * 2.0f;
-        Rect r{x, yMid, segW, kSegH};
+        f32 availW = (boxR.Right() - kBoxRightPad) - x;
+        if (segW > availW) {
+            // Doesn't fully fit — leave x past the right margin so the
+            // remaining segments (and any trailing chevron) skip too.
+            x = boxR.Right();
+            return;
+        }
+        Rect r = segRect(segW);
         bool hover = r.Contains(ui.mouse());
         if (hover) ui.RequestCursor(Luma::CursorShape::Hand);
         if (hover && ui.mousePressed(0)) m_breadPressed = true;
@@ -240,10 +251,10 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
         }
         for (usize i = 0; i < segs.size(); ++i) {
             x += 2.0f;
-            if (x > boxR.Right()) break;
+            // Skip the chevron + segment if either doesn't fully fit.
+            if (x + kChevW > boxR.Right() - kBoxRightPad) break;
             drawChevron(x);
             x += kChevW;
-            if (x > boxR.Right()) break;
             bool isLast = (i + 1 == segs.size());
             drawSegment(segs[i].first.c_str(), segs[i].second, isLast);
         }
