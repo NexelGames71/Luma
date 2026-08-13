@@ -223,7 +223,9 @@ void DockSpace::DrawLeaf(Context& ctx, Node* n) {
         } else if (hovered) {
             ctx.Panel(tab, t.buttonHover);
         }
-        ctx.Heading({tab.x + 13.0f, tab.y, tabW - 18.0f, kTabBarH}, title,
+        // Center the title across the full tab width so long panel names like
+        // "World Outliner" don't visually drift to the right edge.
+        ctx.Heading({tab.x, tab.y, tabW, kTabBarH}, title,
                     active ? t.text : t.textDim);
         if (hovered) {
             if (ctx.mousePressed(0)) {

@@ -76,8 +76,9 @@ BrowserResult ProjectBrowser::Draw(Slate::Context& ui, f32 width, f32 height) {
     ui.Panel({0, 0, width, height}, t.windowBg);
 
     // Banner: subtle gradient with the Luma logo (image if available).
+    // Token ramp: surface2 -> surface0 (top-to-bottom) for a clean fade.
     Rect banner{0, 0, width, 84};
-    ui.GradientRect(banner, Color::RGB(28, 33, 46), Color::RGB(18, 20, 26));
+    ui.GradientRect(banner, t.surface2, t.surface0);
     if (m_logo.Valid()) {
         f32 h = 56.0f;
         f32 w = h * m_logo.ContentAspect();
@@ -142,10 +143,13 @@ BrowserResult ProjectBrowser::Draw(Slate::Context& ui, f32 width, f32 height) {
     ui.Button(Slate::Context::ID("options"),
               {24, height - footerH + 11, 130, 38}, "Options...");
     if (!m_status.empty()) {
+        // Errors stay in a non-accent red so they read as failure without
+        // competing with the Luma blue accent.
+        Color statusColor = m_status.rfind("Created", 0) == 0
+                                ? t.textDim
+                                : t.error;
         ui.LabelIn({170, height - footerH, width - 380, footerH}, m_status,
-                   m_status.rfind("Created", 0) == 0 ? t.textDim
-                                                     : Color::RGB(220, 120, 120),
-                   Align::Left);
+                   statusColor, Align::Left);
     }
     if (ui.Button(Slate::Context::ID("create"),
                   {width - 190, height - footerH + 11, 166, 38},

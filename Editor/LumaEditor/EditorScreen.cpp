@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 
 #include "Luma/Core/Log.h"
+#include "Luma/Scene/SceneSerializer.h"
 
 namespace Luma {
 using Slate::Align;
@@ -31,14 +33,52 @@ EditorScreen::EditorScreen(const std::filesystem::path& projectFile) {
         LUMA_LOG_ERROR("Editor", "could not open project: {}", err);
     }
 
-    // Every world starts with an Environment game object; its Environment
-    // component (attached by default) drives the sky/atmosphere and lighting.
-    CreateEnvironment();
+    // Load the project's startup scene if one has been saved; otherwise start a
+    // fresh world with just an Environment game object (its Environment component
+    // drives the sky/atmosphere and lighting).
+    if (!LoadScene()) {
+        CreateEnvironment();
+    }
 }
 
 void EditorScreen::CreateEnvironment() {
     m_environment = m_scene.CreateEntity("Environment");
     m_scene.Registry().emplace<EnvironmentComponent>(m_environment);
+}
+
+bool EditorScreen::LoadScene() {
+    if (!m_project) return false;
+    std::filesystem::path path = m_project->StartupScenePath();
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) return false;
+
+    std::string err;
+    if (!SceneSerializer::LoadFromFile(m_scene, path, &err)) {
+        LUMA_LOG_ERROR("Editor", "failed to load scene '{}': {}", path.string(),
+                       err);
+        return false;
+    }
+    m_selected = kNullEntity;
+    // Keep sky/lighting working even if the saved scene had no Environment.
+    auto envView = m_scene.Registry().view<EnvironmentComponent>();
+    if (envView.begin() == envView.end()) CreateEnvironment();
+    LUMA_LOG_INFO("Editor", "loaded scene '{}'", path.string());
+    return true;
+}
+
+void EditorScreen::SaveScene() {
+    if (!m_project) return;
+    std::filesystem::path path = m_project->StartupScenePath();
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+
+    std::string err;
+    if (SceneSerializer::SaveToFile(m_scene, path, &err)) {
+        LUMA_LOG_INFO("Editor", "saved scene '{}'", path.string());
+    } else {
+        LUMA_LOG_ERROR("Editor", "failed to save scene '{}': {}", path.string(),
+                       err);
+    }
 }
 
 void EditorScreen::AddEntity() {
@@ -225,10 +265,11 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     if (!m_dockBuilt) BuildDock();
     ui.Panel({0, 0, width, height}, t.windowBg);
 
-    // Menu bar: [gem] Luma  File Edit Assets Window Help ............ project.
+    // Menu bar: surface2 -> surface1 (subtle top-down grade), 1px separator
+    // below. Token-driven so the bar matches the rest of the chrome.
     Rect menu{0, 0, width, 32};
-    ui.GradientRect(menu, Color::RGB(46, 50, 60), Color::RGB(30, 33, 40));
-    ui.Panel({0, 31, width, 1}, Color::RGB(12, 13, 16));
+    ui.GradientRect(menu, t.surface2, t.surface1);
+    ui.Panel({0, 31, width, 1}, t.separator);
 
     // Brand: the Luma app icon (same footprint as Unreal's corner mark).
     if (m_iconLogo) {
@@ -241,7 +282,14 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     const char* items[] = {"File", "Edit", "Assets", "Window", "Help"};
     for (const char* item : items) {
         f32 w = ui.uiFont().Measure(item).x + 22.0f;
-        ui.MenuButton(Slate::Context::ID(item), {mx, 4, w, 24}, item);
+        bool clicked = ui.MenuButton(Slate::Context::ID(item), {mx, 4, w, 24},
+                                     item);
+        if (item == items[0]) {  // File
+            m_fileMenuX = mx;
+            if (clicked) m_showFileMenu = !m_showFileMenu;
+        } else if (clicked) {
+            m_showFileMenu = false;  // other menus close the File dropdown
+        }
         mx += w + 2.0f;
     }
 
@@ -250,15 +298,15 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
     f32 nameW = ui.uiFont().Measure(projName).x;
     f32 pillW = nameW + 34.0f;
     Rect pill{width - pillW - 10.0f, 5, pillW, 22};
-    ui.PanelRoundedBordered(pill, Color::RGB(24, 26, 32),
-                            Color::RGB(52, 57, 67), 11.0f, 1.0f);
+    ui.PanelRoundedBordered(pill, t.surface1, t.outline,
+                            t.radius.pill, t.border.hairline);
     ui.PanelRounded({pill.x + 11.0f, pill.y + 7.0f, 7.0f, 7.0f}, t.accent, 3.5f);
     ui.Heading({pill.x + 24.0f, pill.y, nameW + 8.0f, pill.h}, projName, t.text);
 
     // Toolbar.
     Rect toolbar{0, 32, width, 36};
-    ui.GradientRect(toolbar, Color::RGB(30, 33, 40), Color::RGB(22, 24, 29));
-    ui.Panel({0, 67, width, 1}, t.panelBorder);
+    ui.GradientRect(toolbar, t.surface1, t.surface0);
+    ui.Panel({0, 67, width, 1}, t.separator);
     ui.IconButton(Slate::Context::ID("play"), {width / 2 - 46, 35, 30, 28},
                   m_iconPlay);
     ui.IconButton(Slate::Context::ID("pause"), {width / 2 - 14, 35, 30, 28},
@@ -268,6 +316,24 @@ void EditorScreen::Draw(Slate::Context& ui, f32 width, f32 height) {
 
     // Dockable panels fill the workspace below the toolbar.
     m_dock.Draw(ui, {0, 68.0f, width, height - 68.0f});
+
+    // File dropdown (drawn last so it overlays the workspace).
+    if (m_showFileMenu) {
+        f32 mw = 190.0f;
+        f32 mx0 = m_fileMenuX;
+        f32 my0 = 30.0f;
+        // Overlay surface4 popup with a 2px accent underline (visual "anchor"
+        // back to the menu bar item that opened it). Slice 2 will swap this
+        // for a proper MenuPopup + elevation shadow.
+        ui.PanelRoundedBordered({mx0 - 4, my0 - 4, mw + 8, 34.0f},
+                                t.surface4, t.accent, t.radius.md,
+                                t.border.thick);
+        if (ui.Button(Slate::Context::ID("file.save"), {mx0, my0, mw, 26},
+                      "Save Scene")) {
+            SaveScene();
+            m_showFileMenu = false;
+        }
+    }
 }
 
 void EditorScreen::DrawViewportContent(Slate::Context& ui, const Rect& rect) {
@@ -276,15 +342,16 @@ void EditorScreen::DrawViewportContent(Slate::Context& ui, const Rect& rect) {
     if (m_viewport) {
         ui.Image(m_viewport, rect);
     } else {
-        ui.Panel(rect, Color::RGB(18, 20, 24));
+        ui.Panel(rect, t.surface0);
         ui.LabelIn(rect, "3D Viewport", t.textDim, Align::Center);
     }
     UpdateCameraAndGizmo(ui, rect);
 }
 
 void EditorScreen::DrawConsoleContent(Slate::Context& ui, const Rect& rect) {
-    ui.LabelIn({rect.x + 12, rect.y + 8, rect.w - 20, 22}, "Luma Editor ready.",
-               ui.theme().textDim);
+    // Console text uses the mono font (typography.type.mono -> m_monoFont).
+    ui.LabelInMono({rect.x + 12, rect.y + 8, rect.w - 20, 22},
+                   "Luma Editor ready.", ui.theme().textDim);
 }
 
 void EditorScreen::DrawOutlinerContent(Slate::Context& ui, const Rect& body) {
@@ -336,8 +403,9 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
     y += 34.0f;
 
     auto sectionHeader = [&](const char* label) {
-        ui.GradientRect({body.x, y, body.w, 26}, Color::RGB(44, 48, 57),
-                        Color::RGB(34, 37, 44));
+        // Surface3->surface2 gradient header with a 3px accent stripe on the
+        // left edge. Identifies component sections at a glance.
+        ui.GradientRect({body.x, y, body.w, 26}, t.surface3, t.surface2);
         ui.Panel({body.x, y, 3, 26}, t.accent);
         ui.Heading({x, y, w, 26}, label, t.text);
         y += 32.0f;
@@ -430,7 +498,7 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
         y += 8.0f;
     }
 
-    // Add Component popup: lists component types not yet on the entity.
+    // Add Component popup: surface4 overlay (the popup surface in the ramp).
     if (m_showAddMenu) {
         bool canMesh = !reg.all_of<MeshRendererComponent>(m_selected);
         bool canEnv = !reg.all_of<EnvironmentComponent>(m_selected);
@@ -441,7 +509,8 @@ void EditorScreen::DrawInspectorContent(Slate::Context& ui, const Rect& body) {
         f32 my = body.y + 44.0f;
         f32 rows = static_cast<f32>(count > 0 ? count : 1);
         ui.PanelRoundedBordered({mx - 6, my - 6, mw + 12, rows * 28.0f + 12.0f},
-                                Color::RGB(26, 28, 34), t.accent, 8.0f, 1.0f);
+                                t.surface4, t.accent, t.radius.md,
+                                t.border.thick);
         if (canMesh &&
             ui.Button(Slate::Context::ID("add.mesh"), {mx, my, mw, 24},
                       "Mesh Renderer")) {

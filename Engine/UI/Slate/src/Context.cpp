@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdio>
 
+#include "Luma/Slate/Theme.h"
+
 namespace Luma::Slate {
 namespace {
 
@@ -18,41 +20,45 @@ constexpr int kKeyEnd = 269;
 
 }  // namespace
 
-Theme DarkTheme() {
-    Theme t;
-    // A layered dark palette: deep window, raised panels, subtle borders and a
-    // vivid Luma accent for selection/focus.
-    t.windowBg = Color::RGB(17, 18, 22);
-    t.panelBg = Color::RGB(31, 34, 41);
-    t.panelBorder = Color::RGB(12, 13, 16);
-    t.header = Color::RGB(38, 42, 50);
-    t.button = Color::RGB(52, 57, 67);
-    t.buttonHover = Color::RGB(66, 72, 85);
-    t.buttonActive = Color::RGB(42, 46, 55);
-    t.buttonText = Color::RGB(228, 231, 238);
-    t.text = Color::RGB(233, 236, 243);
-    t.textDim = Color::RGB(146, 154, 168);
-    t.accent = Color::RGB(56, 150, 255);
-    t.accentText = Color::RGB(247, 250, 255);
-    t.fieldBg = Color::RGB(20, 22, 27);
-    t.fieldBorder = Color::RGB(58, 63, 74);
-    t.cardBg = Color::RGB(38, 42, 50);
-    t.cardHover = Color::RGB(46, 51, 61);
-    t.cardSelected = Color::RGB(30, 78, 120);
-    t.caret = Color::RGB(230, 233, 240);
-    t.rounding = 6.0f;
-    return t;
-}
-
 bool Context::Init(Renderer& renderer, const std::string& fontPath,
                    const std::string& titleFontPath, f32 baseSize,
-                   f32 titleSize, const std::string& uiFontPath, f32 uiSize) {
+                   f32 titleSize, const std::string& uiFontPath, f32 uiSize,
+                   const std::string& mediumFontPath, f32 mediumSize,
+                   const std::string& monoFontPath, f32 monoSize) {
     const std::string& titlePath =
         titleFontPath.empty() ? fontPath : titleFontPath;
     const std::string& uiPath = uiFontPath.empty() ? titlePath : uiFontPath;
+    const std::string& mediumPath =
+        mediumFontPath.empty() ? uiPath : mediumFontPath;
+    const std::string& monoPath = monoFontPath.empty() ? fontPath : monoFontPath;
     bool ok = m_font.LoadFromFile(renderer, fontPath, baseSize);
     ok = m_titleFont.LoadFromFile(renderer, titlePath, titleSize) && ok;
     ok = m_uiFont.LoadFromFile(renderer, uiPath, uiSize) && ok;
+    ok = m_mediumFont.LoadFromFile(renderer, mediumPath, mediumSize) && ok;
+    ok = m_monoFont.LoadFromFile(renderer, monoPath, monoSize) && ok;
+    return ok;
+}
+
+bool Context::Init(Renderer& renderer, const Typography& type) {
+    // Persist the typography on the theme so widgets can read sizes/weights
+    // from `theme().type` (design-token source of truth).
+    m_theme.type = type;
+
+    // Fallback chain: regular -> medium -> semiBold -> bold. Each weight uses
+    // the previous non-empty weight's path if its own is missing.
+    const std::string& reg = type.uiRegular;
+    const std::string& med = type.uiMedium.empty() ? reg : type.uiMedium;
+    const std::string& sb = type.uiSemiBold.empty() ? med : type.uiSemiBold;
+    const std::string& bd = type.uiBold.empty() ? sb : type.uiBold;
+    const std::string& mono = type.mono.empty() ? reg : type.mono;
+
+    // Map design roles to Slate's internal font slots. Sizes come from the
+    // typography scale so the whole product stays consistent.
+    bool ok = m_font.LoadFromFile(renderer, reg, type.bodySize);
+    ok = m_mediumFont.LoadFromFile(renderer, med, type.captionSize) && ok;
+    ok = m_uiFont.LoadFromFile(renderer, sb, type.headingSize) && ok;
+    ok = m_titleFont.LoadFromFile(renderer, bd, type.titleSize) && ok;
+    ok = m_monoFont.LoadFromFile(renderer, mono, type.captionSize) && ok;
     return ok;
 }
 
@@ -185,23 +191,42 @@ void Context::Label(Vec2 pos, std::string_view text, Color color) {
 
 void Context::LabelIn(const Rect& rect, std::string_view text, Color color,
                       Align align, bool title) {
+    // Title = splash/big Luma wordmark, otherwise the regular body font.
     Font& f = title ? m_titleFont : m_font;
     Vec2 size = f.Measure(text);
-    f32 x = rect.x + 8.0f;
+    // Token-driven horizontal padding; left-align to the input token (12px).
+    const f32 padX = m_theme.space.lg;
+    f32 x = rect.x + padX;
     if (align == Align::Center) x = rect.x + (rect.w - size.x) * 0.5f;
-    else if (align == Align::Right) x = rect.Right() - size.x - 8.0f;
+    else if (align == Align::Right) x = rect.Right() - size.x - padX;
     f32 y = rect.y + (rect.h - f.LineHeight()) * 0.5f;
     m_draw.PushClip(rect);
     m_draw.AddText(f, {x, y}, text, color);
     m_draw.PopClip();
 }
 
+void Context::LabelInMono(const Rect& rect, std::string_view text, Color color,
+                          Align align) {
+    // Console / log surface; reads from m_monoFont (loaded by Init's mono path).
+    Vec2 size = m_monoFont.Measure(text);
+    const f32 padX = m_theme.space.lg;
+    f32 x = rect.x + padX;
+    if (align == Align::Center) x = rect.x + (rect.w - size.x) * 0.5f;
+    else if (align == Align::Right) x = rect.Right() - size.x - padX;
+    f32 y = rect.y + (rect.h - m_monoFont.LineHeight()) * 0.5f;
+    m_draw.PushClip(rect);
+    m_draw.AddText(m_monoFont, {x, y}, text, color);
+    m_draw.PopClip();
+}
+
 void Context::Heading(const Rect& rect, std::string_view text, Color color,
                       Align align) {
+    // Headings use the UI (SemiBold) font for visible weight contrast.
     Vec2 size = m_uiFont.Measure(text);
-    f32 x = rect.x + 8.0f;
+    const f32 padX = m_theme.space.lg;
+    f32 x = rect.x + padX;
     if (align == Align::Center) x = rect.x + (rect.w - size.x) * 0.5f;
-    else if (align == Align::Right) x = rect.Right() - size.x - 8.0f;
+    else if (align == Align::Right) x = rect.Right() - size.x - padX;
     f32 y = rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f;
     m_draw.PushClip(rect);
     m_draw.AddText(m_uiFont, {x, y}, text, color);
@@ -221,10 +246,19 @@ bool Context::Button(u64 id, const Rect& rect, std::string_view label) {
         m_active = 0;
     }
 
+    // Rest state from the surface ramp; press is a deliberate darken so the
+    // user gets physical feedback even when the cursor hasn't moved.
     Color bg = m_theme.button;
-    if (m_active == id) bg = m_theme.buttonActive;
+    if (m_active == id) bg = Darken(m_theme.button, 0.06f);
     else if (hovered) bg = m_theme.buttonHover;
     m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
+
+    // Focus ring: an accent outline that appears whenever the button is
+    // keyboard-focused or held down (mirrors the focus contract from §1.7).
+    if (m_active == id) {
+        m_draw.AddRectOutline(rect, m_theme.focusRing,
+                              m_theme.border.thick);
+    }
 
     Vec2 size = m_uiFont.Measure(label);
     Vec2 pos{rect.x + (rect.w - size.x) * 0.5f,
@@ -245,16 +279,19 @@ bool Context::MenuButton(u64 id, const Rect& rect, std::string_view label) {
         if (hovered) clicked = true;
         m_active = 0;
     }
+    // Menu-bar item: subtle pill on hover, slightly stronger on press. Use the
+    // surface ramp so the bar reads as flush chrome, not a button.
     if (m_active == id) {
-        m_draw.AddRectFilledRounded(rect, m_theme.buttonActive, 5.0f);
+        m_draw.AddRectFilledRounded(rect, m_theme.buttonActive,
+                                    m_theme.radius.sm);
     } else if (hovered) {
-        m_draw.AddRectFilledRounded(rect, m_theme.buttonHover, 5.0f);
+        m_draw.AddRectFilledRounded(rect, m_theme.buttonHover,
+                                    m_theme.radius.sm);
     }
     Vec2 size = m_uiFont.Measure(label);
     Vec2 pos{rect.x + (rect.w - size.x) * 0.5f,
              rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f};
-    m_draw.AddText(m_uiFont, pos, label,
-                   hovered ? m_theme.text : m_theme.buttonText);
+    m_draw.AddText(m_uiFont, pos, label, m_theme.text);
     return clicked;
 }
 
@@ -269,20 +306,24 @@ bool Context::Tab(u64 id, const Rect& rect, std::string_view label,
         m_active = 0;
     }
 
-    Color bg = active ? m_theme.panelBg : (hovered ? m_theme.buttonHover
-                                                    : m_theme.header);
-    if (active || hovered) {
-        m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
+    // Tabs sit on the panel surface: active gets a raised pill, hover gets a
+    // subtle hint. The accent underline below marks the active tab.
+    if (active) {
+        m_draw.AddRectFilledRounded(rect, m_theme.surface3, m_theme.radius.md);
+    } else if (hovered) {
+        m_draw.AddRectFilledRounded(rect, m_theme.surface2, m_theme.radius.md);
     }
     if (active) {
-        m_draw.AddRectFilled({rect.x + 14.0f, rect.Bottom() - 2.0f,
-                              rect.w - 28.0f, 2.0f},
-                             m_theme.accent);
+        // 2px accent underline (token border.thick), centered under the tab.
+        m_draw.AddRectFilled(
+            {rect.x + rect.w * 0.25f, rect.Bottom() - 2.0f, rect.w * 0.5f, 2.0f},
+            m_theme.accent);
     }
-    Vec2 size = m_font.Measure(label);
+    // Tabs use the UI weight for visible emphasis vs. body text.
+    Vec2 size = m_uiFont.Measure(label);
     Vec2 pos{rect.x + (rect.w - size.x) * 0.5f,
-             rect.y + (rect.h - m_font.LineHeight()) * 0.5f};
-    m_draw.AddText(m_font, pos, label,
+             rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f};
+    m_draw.AddText(m_uiFont, pos, label,
                    active ? m_theme.text : m_theme.textDim);
     return clicked;
 }
@@ -326,22 +367,34 @@ bool Context::TextField(u64 id, const Rect& rect, std::string& text,
         if (m_keyEnd) m_caret = text.size();
     }
 
-    Color border = (m_focus == id) ? m_theme.accent : m_theme.fieldBorder;
-    m_draw.AddRectFilledRounded(rect, border, m_theme.rounding);
-    m_draw.AddRectFilledRounded(rect.Inset(1.0f, 1.0f), m_theme.fieldBg,
-                                m_theme.rounding - 1.0f);
+    // Hairline border, field bg inside, token radius. Focus gets a 2px accent
+    // outline (never a fill) per the focus-ring convention.
+    const f32 ringT = m_theme.border.hairline;
+    const f32 focusT = m_theme.border.thick;
+    bool focused = (m_focus == id);
+    m_draw.AddRectFilledRounded(rect, m_theme.fieldBorder, m_theme.radius.md);
+    m_draw.AddRectFilledRounded(rect.Inset(ringT, ringT), m_theme.fieldBg,
+                                std::max(0.0f, m_theme.radius.md - ringT));
+    if (focused) {
+        m_draw.AddRectOutline(rect.Inset(focusT * 0.5f, focusT * 0.5f),
+                              m_theme.focusRing, focusT);
+    }
 
-    Vec2 tp{rect.x + 8.0f, rect.y + (rect.h - m_font.LineHeight()) * 0.5f};
-    m_draw.PushClip({rect.x + 4.0f, rect.y, rect.w - 8.0f, rect.h});
-    if (text.empty() && m_focus != id) {
+    // Input padding uses the spacing token (lg=12).
+    const f32 padX = m_theme.space.lg;
+    Vec2 tp{rect.x + padX, rect.y + (rect.h - m_font.LineHeight()) * 0.5f};
+    m_draw.PushClip(
+        {rect.x + padX * 0.5f, rect.y, rect.w - padX, rect.h});
+    if (text.empty() && !focused) {
         m_draw.AddText(m_font, tp, placeholder, m_theme.textDim);
     } else {
         m_draw.AddText(m_font, tp, text, m_theme.text);
-        if (m_focus == id && std::fmod(m_time, 1.0f) < 0.5f) {
+        if (focused && std::fmod(m_time, 1.0f) < 0.5f) {
             usize caret = m_caret <= text.size() ? m_caret : text.size();
             Vec2 w = m_font.Measure(std::string_view(text).substr(0, caret));
-            m_draw.AddRectFilled({tp.x + w.x, rect.y + 6.0f, 1.5f, rect.h - 12.0f},
-                                 m_theme.caret);
+            m_draw.AddRectFilled({tp.x + w.x, rect.y + 6.0f, 1.5f,
+                                  rect.h - 12.0f},
+                                 m_theme.accent);
         }
     }
     m_draw.PopClip();
@@ -359,19 +412,27 @@ bool Context::Card(u64 id, const Rect& rect, std::string_view title,
         m_active = 0;
     }
 
-    Color bg = selected ? m_theme.cardSelected
-                        : (hovered ? m_theme.cardHover : m_theme.cardBg);
-    Color border = selected ? m_theme.accent : m_theme.panelBorder;
-    f32 t = selected ? 2.0f : 1.0f;
-    m_draw.AddRectFilledRounded(rect, border, m_theme.rounding);
-    m_draw.AddRectFilledRounded(rect.Inset(t, t), bg, m_theme.rounding - t);
+    // Three-state fill: selected (accentMuted) > hover (surface3) > rest
+    // (surface2). Border is hairline by default and a 2px accent when selected.
+    Color bg = selected
+                   ? m_theme.cardSelected
+                   : (hovered ? m_theme.cardHover : m_theme.cardBg);
+    const f32 borderT = selected ? m_theme.border.thick
+                                 : m_theme.border.hairline;
+    Color border = selected ? m_theme.accent : m_theme.outline;
+    m_draw.AddRectFilledRounded(rect, border, m_theme.radius.md);
+    m_draw.AddRectFilledRounded(rect.Inset(borderT, borderT), bg,
+                                std::max(0.0f, m_theme.radius.md - borderT));
 
-    m_draw.PushClip(rect.Inset(10.0f, 8.0f));
+    m_draw.PushClip(rect.Inset(m_theme.space.md, m_theme.space.sm));
     Color titleColor = selected ? m_theme.accentText : m_theme.text;
-    m_draw.AddText(m_font, {rect.x + 12.0f, rect.Bottom() - 48.0f}, title,
-                   titleColor);
-    m_draw.AddText(m_font, {rect.x + 12.0f, rect.Bottom() - 26.0f}, desc,
-                   m_theme.textDim);
+    m_draw.AddText(
+        m_uiFont,
+        {rect.x + m_theme.space.lg, rect.Bottom() - 46.0f},
+        title, titleColor);
+    m_draw.AddText(m_font,
+                   {rect.x + m_theme.space.lg, rect.Bottom() - 24.0f},
+                   desc, m_theme.textDim);
     m_draw.PopClip();
     return clicked;
 }
@@ -387,39 +448,49 @@ bool Context::ImageCard(u64 id, const Rect& rect, TextureHandle image,
         m_active = 0;
     }
 
-    Color border = selected ? m_theme.accent
-                            : (hovered ? m_theme.textDim : m_theme.panelBorder);
-    f32 t = selected ? 3.0f : 1.0f;
-    m_draw.AddRectFilledRounded(rect, border, m_theme.rounding);
+    // Selected = 2px accent border; hovered = outline color border; rest =
+    // hairline outline against the panel.
+    const f32 borderT = selected ? m_theme.border.thick
+                                 : m_theme.border.hairline;
+    Color border = selected ? m_theme.accent : m_theme.outline;
+    m_draw.AddRectFilledRounded(rect, border, m_theme.radius.md);
     if (image) {
-        m_draw.AddImage(image, rect.Inset(t, t), Rect{0.0f, 0.0f, 1.0f, 1.0f},
-                        Color::RGB(255, 255, 255));
+        m_draw.AddImage(image, rect.Inset(borderT, borderT),
+                        Rect{0.0f, 0.0f, 1.0f, 1.0f}, Color::RGB(255, 255, 255));
     } else {
-        m_draw.AddRectFilledRounded(rect.Inset(t, t), m_theme.cardBg,
-                                    m_theme.rounding - t);
+        m_draw.AddRectFilledRounded(
+            rect.Inset(borderT, borderT), m_theme.cardBg,
+            std::max(0.0f, m_theme.radius.md - borderT));
     }
     return clicked;
 }
 
 bool Context::IconButton(u64 id, const Rect& rect, TextureHandle icon) {
     bool hovered = rect.Contains(m_mouse);
-    if (hovered) m_hot = id;
-    bool clicked = false;
+    if (hovered) {
+        m_hot = id;
+        m_requestedCursor = CursorShape::Hand;
+    }
     if (hovered && m_mousePressed[0]) m_active = id;
+    bool clicked = false;
     if (m_active == id && m_mouseReleased[0]) {
         if (hovered) clicked = true;
         m_active = 0;
     }
+    // Same ramp as text buttons for visual consistency across the toolbar.
     Color bg = m_theme.button;
-    if (m_active == id) bg = m_theme.buttonActive;
+    if (m_active == id) bg = Darken(m_theme.button, 0.06f);
     else if (hovered) bg = m_theme.buttonHover;
     m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
     if (icon) {
-        f32 s = std::min(rect.w, rect.h) - 10.0f;
+        // Icon padding from the sizing token (icon 14/16/20, here 14).
+        const f32 iconSide = m_theme.size.iconMd;
+        f32 s = std::min(rect.w, rect.h) - iconSide;
+        s = std::max(s, 1.0f);
         Rect ir{rect.x + (rect.w - s) * 0.5f, rect.y + (rect.h - s) * 0.5f, s,
                 s};
         m_draw.AddImage(icon, ir, Rect{0.0f, 0.0f, 1.0f, 1.0f},
-                        Color::RGB(255, 255, 255));
+                        m_theme.text);
     }
     return clicked;
 }
@@ -434,22 +505,27 @@ bool Context::Selectable(u64 id, const Rect& rect, std::string_view label,
         if (hovered) clicked = true;
         m_active = 0;
     }
+    // Outliner rows: selected gets accentMuted (low-chroma), hover gets a
+    // subtle surface2 lift so the row reads as interactive.
     if (selected) {
-        m_draw.AddRectFilledRounded(rect, m_theme.cardSelected, m_theme.rounding);
+        m_draw.AddRectFilledRounded(rect, m_theme.selectionBg, m_theme.radius.sm);
     } else if (hovered) {
-        m_draw.AddRectFilledRounded(rect, m_theme.buttonHover, m_theme.rounding);
+        m_draw.AddRectFilledRounded(rect, m_theme.surface2, m_theme.radius.sm);
     }
-    m_draw.AddText(m_font,
-                   {rect.x + 10.0f, rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
-                   label, selected ? m_theme.accentText : m_theme.text);
+    m_draw.AddText(
+        m_font,
+        {rect.x + m_theme.space.md + m_theme.space.xs,
+         rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
+        label, selected ? m_theme.selectionText : m_theme.text);
     return clicked;
 }
 
 bool Context::Checkbox(u64 id, const Rect& box, std::string_view label,
                        bool& value) {
-    // Clickable region spans the box plus the label.
+    // Clickable region spans the box plus the label, with token padding.
     f32 labelW = m_font.Measure(label).x;
-    Rect hitRect{box.x, box.y, box.w + 8.0f + labelW, box.h};
+    f32 padX = m_theme.space.md;
+    Rect hitRect{box.x, box.y, box.w + padX + labelW, box.h};
     bool hovered = hitRect.Contains(m_mouse);
     if (hovered) m_hot = id;
     bool changed = false;
@@ -462,13 +538,19 @@ bool Context::Checkbox(u64 id, const Rect& box, std::string_view label,
         m_active = 0;
     }
 
-    m_draw.AddRectFilled(box, m_theme.fieldBg);
-    m_draw.AddRectOutline(box, hovered ? m_theme.accent : m_theme.fieldBorder,
-                          1.0f);
+    // Rounded square, hairline border, accent fill when checked. Hover swaps
+    // the border to accent as a focus-ring hint.
+    m_draw.AddRectFilledRounded(box, m_theme.fieldBg, m_theme.radius.sm);
+    m_draw.AddRectOutline(
+        Rect{box.x + 0.5f, box.y + 0.5f, box.w - 1.0f, box.h - 1.0f},
+        hovered ? m_theme.focusRing : m_theme.fieldBorder,
+        m_theme.border.hairline);
     if (value) {
-        m_draw.AddRectFilled(box.Inset(4.0f, 4.0f), m_theme.accent);
+        m_draw.AddRectFilledRounded(
+            box.Inset(3.0f, 3.0f), m_theme.accent,
+            std::max(0.0f, m_theme.radius.sm - 1.0f));
     }
-    m_draw.AddText(m_font, {box.Right() + 8.0f,
+    m_draw.AddText(m_font, {box.Right() + padX,
                            box.y + (box.h - m_font.LineHeight()) * 0.5f},
                    label, m_theme.text);
     return changed;
@@ -493,13 +575,17 @@ bool Context::DragFloat(u64 id, const Rect& rect, f32& value, f32 speed) {
         }
     }
 
-    Color bg = (m_active == id) ? m_theme.buttonActive : m_theme.fieldBg;
-    m_draw.AddRectFilledRounded(rect, bg, m_theme.rounding);
-    if (hovered || m_active == id) {
-        m_draw.AddRectFilledRounded(rect, m_theme.accent, m_theme.rounding);
-        m_draw.AddRectFilledRounded(rect.Inset(1.0f, 1.0f), bg,
-                                    m_theme.rounding - 1.0f);
-    }
+    // Hairline border resting; accent hairline when hovered/active (focus
+    // ring convention). Field background inside, then value text centered.
+    bool active = (m_active == id);
+    Color border = (hovered || active) ? m_theme.focusRing
+                                       : m_theme.fieldBorder;
+    m_draw.AddRectFilledRounded(rect, border, m_theme.radius.md);
+    m_draw.AddRectFilledRounded(
+        rect.Inset(m_theme.border.hairline, m_theme.border.hairline),
+        m_theme.fieldBg,
+        std::max(0.0f, m_theme.radius.md - m_theme.border.hairline));
+
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%.2f", value);
     Vec2 ts = m_font.Measure(buf);
@@ -513,11 +599,13 @@ bool Context::DragFloat(u64 id, const Rect& rect, f32& value, f32 speed) {
 }
 
 bool Context::Vector3Field(u64 id, const Rect& rect, f32* xyz) {
+    // Channel colors (refined to read as identification, not a primary
+    // signal). Text on the chip is white; the value cell uses field bg.
     const char* labels[3] = {"X", "Y", "Z"};
-    const Color labelColors[3] = {Color::RGB(196, 78, 82),
-                                  Color::RGB(96, 176, 96),
-                                  Color::RGB(78, 130, 208)};
-    const f32 gap = 6.0f;
+    const Color chipColors[3] = {Color::RGB(196, 78, 82),
+                                 Color::RGB(96, 176, 96),
+                                 Color::RGB(78, 130, 208)};
+    const f32 gap = m_theme.space.sm + 2.0f;
     const f32 cellW = (rect.w - gap * 2.0f) / 3.0f;
     const f32 labelW = 18.0f;
     bool changed = false;
@@ -525,12 +613,12 @@ bool Context::Vector3Field(u64 id, const Rect& rect, f32* xyz) {
         Rect cell{rect.x + static_cast<f32>(i) * (cellW + gap), rect.y, cellW,
                   rect.h};
         m_draw.AddRectFilledRounded({cell.x, cell.y, labelW, cell.h},
-                                    labelColors[i], m_theme.rounding);
+                                    chipColors[i], m_theme.radius.sm);
         Vec2 ls = m_font.Measure(labels[i]);
         m_draw.AddText(m_font,
                        {cell.x + (labelW - ls.x) * 0.5f,
                         cell.y + (cell.h - m_font.LineHeight()) * 0.5f},
-                       labels[i], Color::RGB(245, 245, 248));
+                       labels[i], m_theme.accentText);
         Rect field{cell.x + labelW + 2.0f, cell.y, cell.w - labelW - 2.0f,
                    cell.h};
         if (DragFloat(id * 4 + static_cast<u64>(i) + 1, field, xyz[i])) {
@@ -554,21 +642,28 @@ bool Context::CollapsingHeader(u64 id, const Rect& rect, std::string_view label,
         m_active = 0;
     }
 
-    m_draw.AddRectFilledRounded(
-        rect, hovered ? m_theme.buttonHover : m_theme.button, m_theme.rounding);
-    // Disclosure triangle.
-    f32 cy = rect.y + rect.h * 0.5f;
-    f32 cx = rect.x + 14.0f;
-    if (open) {
-        m_draw.AddTriangle({cx - 5, cy - 3}, {cx + 5, cy - 3}, {cx, cy + 4},
-                           m_theme.textDim);
-    } else {
-        m_draw.AddTriangle({cx - 3, cy - 5}, {cx + 4, cy}, {cx - 3, cy + 5},
-                           m_theme.textDim);
+    // Subtle surface lift on hover; no fill when idle. Hairline border only
+    // on hover so the rest state reads as a flat section header.
+    if (hovered) {
+        m_draw.AddRectFilledRounded(rect, m_theme.surface3,
+                                    m_theme.radius.md);
     }
-    m_draw.AddText(m_font, {rect.x + 28.0f,
-                           rect.y + (rect.h - m_font.LineHeight()) * 0.5f},
-                   label, m_theme.text);
+    // Chevron disclosure (token-aligned geometry).
+    f32 cy = rect.y + rect.h * 0.5f;
+    f32 cx = rect.x + m_theme.space.lg + 2.0f;
+    Color chevron = open ? m_theme.text : m_theme.textDim;
+    if (open) {
+        m_draw.AddTriangle({cx - 4, cy - 2}, {cx + 4, cy - 2}, {cx, cy + 4},
+                           chevron);
+    } else {
+        m_draw.AddTriangle({cx - 2, cy - 4}, {cx + 4, cy}, {cx - 2, cy + 4},
+                           chevron);
+    }
+    m_draw.AddText(
+        m_uiFont,
+        {rect.x + m_theme.space.lg + 14.0f,
+         rect.y + (rect.h - m_uiFont.LineHeight()) * 0.5f},
+        label, m_theme.text);
     return clicked;
 }
 
@@ -593,12 +688,13 @@ bool Context::SplitterV(u64 id, const Rect& region, f32& ratio, Rect& left,
         }
     }
 
-    // Panels butt together (shared edge); a 1px line marks the boundary.
+    // Panels butt together (shared edge); rest = hairline separator, drag/hover
+    // = accent (visible affordance that the divider is grabbable).
     left = {region.x, region.y, splitX - region.x, region.h};
     right = {splitX, region.y, region.Right() - splitX, region.h};
     m_draw.AddRectFilled({splitX - half, region.y, thickness, region.h},
                          (dragging || hovered) ? m_theme.accent
-                                               : m_theme.panelBorder);
+                                               : m_theme.separator);
     return dragging;
 }
 
@@ -627,30 +723,35 @@ bool Context::SplitterH(u64 id, const Rect& region, f32& ratio, Rect& top,
     bottom = {region.x, splitY, region.w, region.Bottom() - splitY};
     m_draw.AddRectFilled({region.x, splitY - half, region.w, thickness},
                          (dragging || hovered) ? m_theme.accent
-                                               : m_theme.panelBorder);
+                                               : m_theme.separator);
     return dragging;
 }
 
 Rect Context::PanelWithTitle(const Rect& rect, std::string_view title) {
-    // Flush docked panel with an active tab (Unity/Unreal style): a header strip
-    // with a tab chip that merges into the body and carries an accent underline.
+    // Flush docked panel with an active tab (Unity/Unreal style): a surface2
+    // header strip with a tab chip that matches the body, an accent underline
+    // on the title, and a hairline separator between header and body.
     const f32 headerH = 28.0f;
     m_draw.AddRectFilled(rect, m_theme.panelBg);
     m_draw.AddRectFilled({rect.x, rect.y, rect.w, headerH}, m_theme.header);
 
-    f32 tabW = m_font.Measure(title).x + 30.0f;
+    // Tab chip merges into the body and carries the accent underline.
+    f32 tabW = m_uiFont.Measure(title).x + m_theme.space.xl;
     Rect tab{rect.x, rect.y, tabW, headerH};
-    // Tab body matches the panel so it reads as the active/selected tab.
     m_draw.AddRectFilled(tab, m_theme.panelBg);
-    m_draw.AddRectFilled({tab.x, tab.Bottom() - 2.0f, tab.w, 2.0f},
+    m_draw.AddRectFilled({tab.x + m_theme.space.md, tab.Bottom() - 2.0f,
+                          tab.w - m_theme.space.lg, 2.0f},
                          m_theme.accent);
     m_draw.AddText(
-        m_font, {rect.x + 14.0f, rect.y + (headerH - m_font.LineHeight()) * 0.5f},
+        m_uiFont,
+        {rect.x + m_theme.space.lg,
+         rect.y + (headerH - m_uiFont.LineHeight()) * 0.5f},
         title, m_theme.text);
 
     m_draw.AddRectFilled({rect.x, rect.y + headerH, rect.w, 1.0f},
-                         m_theme.panelBorder);
-    return Rect{rect.x, rect.y + headerH + 1.0f, rect.w, rect.h - headerH - 1.0f};
+                         m_theme.separator);
+    return Rect{rect.x, rect.y + headerH + 1.0f, rect.w,
+                rect.h - headerH - 1.0f};
 }
 
 }  // namespace Luma::Slate

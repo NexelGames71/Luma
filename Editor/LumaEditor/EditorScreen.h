@@ -44,6 +44,10 @@ public:
 private:
     void AddEntity();
     void CreateEnvironment();
+    // Loads the project's startup scene from disk; returns false if there is no
+    // project or no scene file yet. Saves the current scene to that same path.
+    bool LoadScene();
+    void SaveScene();
     void BuildDock();
     void UpdateCameraAndGizmo(Slate::Context& ui, const Slate::Rect& viewport);
     void DrawOutlinerContent(Slate::Context& ui, const Slate::Rect& rect);
@@ -58,7 +62,9 @@ private:
     Entity m_selected = kNullEntity;
     Entity m_environment = kNullEntity;
     int m_nextNumber = 1;
-    bool m_showAddMenu = false;  // inspector "Add Component" popup
+    bool m_showAddMenu = false;   // inspector "Add Component" popup
+    bool m_showFileMenu = false;  // menu-bar "File" dropdown
+    f32 m_fileMenuX = 42.0f;      // x of the File menu button (for the dropdown)
 
     TranslateGizmo m_gizmo;
     std::vector<SceneInstance> m_instances;  // rebuilt each frame

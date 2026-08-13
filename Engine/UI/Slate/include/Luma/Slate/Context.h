@@ -7,49 +7,39 @@
 #include "Luma/RHI/Renderer.h"
 #include "Luma/Slate/DrawList.h"
 #include "Luma/Slate/Font.h"
+#include "Luma/Slate/Theme.h"
 #include "Luma/Slate/Types.h"
 
 // Luma Slate immediate-mode UI context. The app feeds input each frame, then
 // calls widget functions between BeginFrame/EndFrame; EndFrame returns the
 // UIDrawData to hand to Renderer::DrawUI.
+//
+// Visual constants (colors, sizes, radii, motion) live in Theme.h. The
+// Context owns one Theme that widgets read through m_theme.
 
 namespace Luma::Slate {
-
-struct Theme {
-    Color windowBg;
-    Color panelBg;
-    Color panelBorder;
-    Color header;
-    Color button;
-    Color buttonHover;
-    Color buttonActive;
-    Color buttonText;
-    Color text;
-    Color textDim;
-    Color accent;
-    Color accentText;
-    Color fieldBg;
-    Color fieldBorder;
-    Color cardBg;
-    Color cardHover;
-    Color cardSelected;
-    Color caret;
-    f32 rounding = 6.0f;
-};
-
-Theme DarkTheme();
 
 // Horizontal text alignment for LabelIn.
 enum class Align { Left, Center, Right };
 
 class Context {
 public:
-    // Loads the base + title fonts through the renderer. If titleFontPath is
-    // empty the base font is reused for titles. Returns false on error.
+    // Loads the fonts through the renderer. Empty paths fall back to the
+    // previous font in the chain: title -> body, ui -> title, medium -> ui,
+    // mono -> body. Returns false on error. Init must be called before any
+    // widget draws.
     bool Init(Renderer& renderer, const std::string& fontPath,
               const std::string& titleFontPath = {}, f32 baseSize = 16.0f,
               f32 titleSize = 30.0f, const std::string& uiFontPath = {},
-              f32 uiSize = 15.0f);
+              f32 uiSize = 15.0f, const std::string& mediumFontPath = {},
+              f32 mediumSize = 12.5f,
+              const std::string& monoFontPath = {}, f32 monoSize = 13.0f);
+
+    // Preferred entry: load the font chain from a Theme::Typography struct so
+    // weights, sizes, and family paths are all driven by the design system.
+    // Empty string fields fall back to the previous weight in the chain
+    // (semiBold -> medium -> regular).
+    bool Init(Renderer& renderer, const Typography& type);
 
     // --- Input feed (call from the app's event callback) --------------------
     void OnMouseMove(f32 x, f32 y);
@@ -82,6 +72,9 @@ public:
     void Label(Vec2 pos, std::string_view text, Color color);
     void LabelIn(const Rect& rect, std::string_view text, Color color,
                  Align align = Align::Left, bool title = false);
+    // Label rendered with the monospace font (console / logs / code).
+    void LabelInMono(const Rect& rect, std::string_view text, Color color,
+                     Align align = Align::Left);
     // Draws text in the semibold UI font (for tab titles, section headers).
     void Heading(const Rect& rect, std::string_view text, Color color,
                  Align align = Align::Left);
@@ -127,6 +120,8 @@ public:
     Font& font() { return m_font; }
     Font& titleFont() { return m_titleFont; }
     Font& uiFont() { return m_uiFont; }
+    Font& mediumFont() { return m_mediumFont; }
+    Font& monoFont() { return m_monoFont; }
     Vec2 mouse() const { return m_mouse; }
     Vec2 mouseDelta() const { return m_mouseDelta; }
     f32 scrollDelta() const { return m_scroll; }
@@ -153,6 +148,8 @@ private:
     Font m_font;
     Font m_titleFont;
     Font m_uiFont;
+    Font m_mediumFont;
+    Font m_monoFont;
     Theme m_theme = DarkTheme();
 
     Vec2 m_mouse;
