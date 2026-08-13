@@ -165,47 +165,52 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
                     chev, toggleHover ? t.text : t.textDim);
 
     // Breadcrumb: lives in the gap between Refresh and the search bar,
-    // same row. Unreal-style with an orange folder glyph on "Content",
-    // Icon::ChevronRight separators, and clickable segments.
+    // same row, wrapped in a rounded "field" box that matches the search
+    // bar's look. No folder icon; no hover/highlight on segments (the
+    // text serves as the click target).
     constexpr f32 kSegH = 20.0f;
     constexpr f32 kSegPadX = 8.0f;
-    constexpr f32 kIconSize = 14.0f;
-    constexpr f32 kIconGap = 4.0f;
     constexpr f32 kChevW = 16.0f;
-    const Slate::Color kFolderOrange{255, 178, 92, 255};
+    constexpr f32 kBoxPad = 8.0f;  // left padding inside the box
     const Slate::Font& f = ui.uiFont();
-    f32 x = rect.x + 40.0f;
+    f32 bLeft = rect.x + 40.0f;
     f32 bRight = barX - kBarGap;
+    f32 boxW = bRight - bLeft;
+    Rect boxR{bLeft, rect.y + 6.0f, boxW, kBarH};
+    // Match the search bar: outer field-border ring + inner field fill,
+    // both rounded with the field radius.
+    ui.PanelRounded(boxR, t.fieldBorder, t.radius.md);
+    ui.PanelRounded(boxR.Inset(t.border.hairline, t.border.hairline),
+                    t.fieldBg,
+                    std::max(0.0f, t.radius.md - t.border.hairline));
+
+    // Segment text cursor starts inside the box's left padding.
+    f32 x = boxR.x + kBoxPad;
     f32 yMid = rect.y + (rect.h - kSegH) * 0.5f;
 
-    // Clip the breadcrumb to its gap so segment labels can't draw under
-    // the search bar if the path is very long.
-    ui.PushClip({x, rect.y, bRight - x, rect.h});
+    // Clip the breadcrumb to the box interior so long paths can't bleed
+    // across the search bar.
+    ui.PushClip({boxR.x, boxR.y, boxR.w, boxR.h});
 
-    auto drawFolder = [&](f32 xPos) {
-        if (m_texFolder) {
-            ui.Image(m_texFolder,
-                     {xPos, yMid + (kSegH - kIconSize) * 0.5f, kIconSize,
-                      kIconSize},
-                     kFolderOrange);
-        } else {
-            Slate::DrawIcon(ui,
-                            {xPos, yMid + (kSegH - kIconSize) * 0.5f,
-                             kIconSize, kIconSize},
-                            Icon::Folder, kFolderOrange);
-        }
-    };
     auto drawChevron = [&](f32 xPos) {
         Slate::DrawIcon(ui,
                         {xPos, yMid + (kSegH - 10.0f) * 0.5f, 10.0f, 10.0f},
                         Icon::ChevronRight, t.textDisabled);
     };
-    auto drawSegment = [&](u64 id, const char* label,
+    // No-chrome segment: hit-test inline (no hover/active fill drawn) and
+    // lay down plain text. Tints the leaf (current folder) in textDim.
+    auto drawSegment = [&](const char* label,
                            const std::filesystem::path& target, bool isLast) {
         Vec2 ts = f.Measure(label);
         f32 segW = ts.x + kSegPadX * 2.0f;
         Rect r{x, yMid, segW, kSegH};
-        if (ui.Button(id, r, "")) NavigateTo(target);
+        bool hover = r.Contains(ui.mouse());
+        if (hover) ui.RequestCursor(Luma::CursorShape::Hand);
+        if (hover && ui.mousePressed(0)) m_breadPressed = true;
+        if (ui.mouseReleased(0)) {
+            if (m_breadPressed && hover) NavigateTo(target);
+            m_breadPressed = false;
+        }
         ui.LabelIn({r.x + kSegPadX, r.y + (r.h - ts.y) * 0.5f, r.w - kSegPadX,
                     r.h},
                    label, isLast ? t.textDim : t.text, Align::Left);
@@ -213,13 +218,10 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
     };
 
     // Root segment.
-    drawFolder(x);
-    x += kIconSize + kIconGap;
     std::filesystem::path rootTarget;
     if (m_registry && !m_registry->Roots().empty())
         rootTarget = m_registry->Roots().front();
-    drawSegment(Slate::Context::ID("cb.bread.root"), "Content", rootTarget,
-                m_currentFolder.empty());
+    drawSegment("Content", rootTarget, m_currentFolder.empty());
 
     if (!m_currentFolder.empty() && m_registry) {
         std::string rel = m_registry->DisplayPathFor(m_currentFolder);
@@ -238,13 +240,12 @@ void ContentBrowserPanel::DrawToolbar(Slate::Context& ui,
         }
         for (usize i = 0; i < segs.size(); ++i) {
             x += 2.0f;
-            if (x > bRight) break;  // stop before clipping bleeds into search
+            if (x > boxR.Right()) break;
             drawChevron(x);
             x += kChevW;
-            if (x > bRight) break;
+            if (x > boxR.Right()) break;
             bool isLast = (i + 1 == segs.size());
-            drawSegment(Slate::Context::ID(segs[i].second.string().c_str()),
-                        segs[i].first.c_str(), segs[i].second, isLast);
+            drawSegment(segs[i].first.c_str(), segs[i].second, isLast);
         }
     }
     ui.PopClip();

@@ -74,6 +74,9 @@ private:
     // filters is open. Toggled by the down/up chevron button inside the
     // search bar; dismissed by selection or outside-click.
     bool m_filterMenuOpen = false;
+    // True between a press over a breadcrumb segment and its release, so a
+    // press-then-drag-off release doesn't navigate.
+    bool m_breadPressed = false;
     // True between a press over the reload icon and its release, so a
     // press-then-drag-off release doesn't trigger a scan.
     bool m_reloadPressed = false;
