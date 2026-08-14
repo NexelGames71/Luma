@@ -112,8 +112,11 @@ private:
 
     // Layout constants.
     static constexpr f32 kToolbarH = 36.0f;
-    static constexpr f32 kTileSize = 80.0f;
-    static constexpr f32 kTileGap = 8.0f;
+    // Card dimensions for the asset grid (Unreal-style): a thumbnail on
+    // top + name + asset type rows below.
+    static constexpr f32 kTileW = 96.0f;
+    static constexpr f32 kTileH = 110.0f;
+    static constexpr f32 kTileGap = 6.0f;
 
     // Draw helpers (called from Draw).
     void DrawToolbar(Slate::Context& ui, const Slate::Rect& rect);

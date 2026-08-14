@@ -490,64 +490,113 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
                   return an < bn;
               });
 
-    // Tile grid: compute how many columns fit, then draw rows of tiles.
-    f32 pad = 12.0f;
-    f32 availW = rect.w - pad * 2.0f;
-    f32 colW = kTileSize + kTileGap;
+    // Card grid: each card is kTileW x kTileH with kTileGap between them.
+    // Compute columns that fit the available width and start rows from
+    // the top padding.
+    constexpr f32 kPad = 12.0f;
+    constexpr f32 kThumbH = 70.0f;       // top thumbnail strip
+    constexpr f32 kTextRowsH = kTileH - kThumbH;  // name + type rows
+    const Slate::Font& f = ui.uiFont();
+    f32 availW = rect.w - kPad * 2.0f;
+    f32 colW = kTileW + kTileGap;
     int cols = std::max(1, static_cast<int>(availW / colW));
-    f32 startX = rect.x + pad;
-    f32 startY = rect.y + pad;
+    f32 startX = rect.x + kPad;
+    f32 startY = rect.y + kPad;
 
-    // Orange tint for folder glyphs.
-    const Slate::Color kFolderOrange{255, 178, 92, 255};
+    // Per-card palette (Unreal-inspired): dark charcoal card on a softer
+    // body, light-blue accent for selected, brighter charcoal on hover.
+    const Slate::Color kCardRest = Slate::Darken(t.surface2, 0.05f);
+    const Slate::Color kCardHover = t.surface3;
+    const Slate::Color kCardSelected = t.accentMuted;
+    const Slate::Color kBorderRest = t.outline;
+    const Slate::Color kBorderHover = Slate::Mix(t.outline, t.accent, 0.5f);
+    const Slate::Color kBorderSelected = t.accent;
 
     for (usize i = 0; i < entries.size(); ++i) {
         const auto* a = entries[i];
         int row = static_cast<int>(i) / cols;
         int col = static_cast<int>(i) % cols;
         f32 tx = startX + col * colW;
-        f32 ty = startY + row * (kTileSize + kTileGap + 18.0f);
-        Rect tile{tx, ty, kTileSize, kTileSize};
-        Rect labelR{tx - 4.0f, ty + kTileSize + 2.0f, kTileSize + 8.0f,
-                    16.0f};
+        f32 ty = startY + row * (kTileH + kTileGap);
+        Rect card{tx, ty, kTileW, kTileH};
+
+        // Stable id so Animate() can interpolate hover/select per card
+        // across frames without resetting.
+        u64 cardId = Slate::Context::ID(
+            (a->packagePath.string() + "|card").c_str());
 
         bool selected = (m_selected == a->id);
-        if (ui.Selectable(
-                Slate::Context::ID((a->packagePath.string() + "|tile")
-                                           .c_str()),
-                tile, "", selected)) {
+        bool hover = card.Contains(ui.mouse());
+        if (hover) ui.RequestCursor(Luma::CursorShape::Hand);
+
+        // Smooth transitions: hoverT (0..1), selectT (0..1) lerp toward
+        // their targets so cards fade between idle / hover / selected.
+        f32 hoverT = ui.Animate(cardId ^ 0xC0FFEEull, hover, t.motion.hover);
+        f32 selectT = ui.Animate(cardId ^ 0xBEEF0001ull, selected,
+                                 t.motion.press);
+
+        // Card backgrounds blend idle -> hover -> selected.
+        Slate::Color cardBg = Slate::Mix(kCardRest, kCardHover, hoverT);
+        cardBg = Slate::Mix(cardBg, kCardSelected, selectT);
+        Slate::Color cardBorder =
+            Slate::Mix(kBorderRest, kBorderHover, hoverT);
+        cardBorder = Slate::Mix(cardBorder, kBorderSelected, selectT);
+
+        // Click handling via Selectable so the hover state above remains
+        // accurate. Note: we don't use Selectable's own hover/select fills
+        // because we want full control over the card styling.
+        if (ui.Selectable(cardId, card, "", selected, Icon::None)) {
             if (a->IsFolder()) {
                 m_currentFolder = a->packagePath;
             } else {
                 m_selected = a->id;
             }
         }
-        // Tile background + glyph. A soft drop shadow sits behind the
-        // card so it reads as a dark edge fading into the body.
-        ui.drawList().AddRectShadow(tile, t.radius.md, 0.5f, 4.0f);
-        ui.PanelRounded(tile, selected ? t.accentMuted : t.surface2,
-                        t.radius.md);
-        ui.PanelRoundedBordered(tile, t.outline, t.outline, t.radius.md,
+        // Soft shadow under the card so it reads as dark at the edges.
+        ui.drawList().AddRectShadow(card, t.radius.md, 0.45f, 3.0f);
+        ui.PanelRounded(card, cardBg, t.radius.md);
+        ui.PanelRoundedBordered(card, cardBg, cardBorder, t.radius.md,
                                 t.border.hairline);
-        Rect glyphR{tile.x + 12.0f, tile.y + 12.0f, tile.w - 24.0f,
-                    tile.h - 24.0f};
-        if (a->IsFolder()) {
-            // Folder tile: prefer the open-folder PNG (its built-in
-            // colors), then the legacy orange-tinted folder PNG, then the
-            // procedural Icon::Folder glyph.
-            if (m_texOpenFolder) {
-                ui.Image(m_texOpenFolder, glyphR);
-            } else if (m_texFolder) {
-                ui.Image(m_texFolder, glyphR, kFolderOrange);
-            } else {
-                Slate::DrawIcon(ui, glyphR, Icon::Folder, kFolderOrange);
-            }
+
+        // Thumbnail strip (top portion of the card). Slightly darker so
+        // the icon reads as framed inside the card.
+        Rect thumb{card.x + 4.0f, card.y + 4.0f, card.w - 8.0f, kThumbH - 4.0f};
+        ui.PanelRounded(thumb, Slate::Darken(cardBg, 0.30f),
+                        t.radius.sm);
+        // Centered icon in the thumbnail strip.
+        Slate::Icon icon = a->IsFolder() ? Icon::Folder
+                                          : IconForType(a->type);
+        Slate::Color iconColor = a->IsFolder()
+                                     ? Slate::Color{255, 178, 92, 255}
+                                     : (selected ? t.selectionText : t.textDim);
+        f32 iconSide = std::min(thumb.w, thumb.h) * 0.62f;
+        Rect iconR{thumb.x + (thumb.w - iconSide) * 0.5f,
+                   thumb.y + (thumb.h - iconSide) * 0.5f,
+                   iconSide, iconSide};
+        if (a->IsFolder() && m_texOpenFolder) {
+            ui.Image(m_texOpenFolder, iconR);
+        } else if (a->IsFolder() && m_texFolder) {
+            ui.Image(m_texFolder, iconR, iconColor);
         } else {
-            Slate::DrawIcon(ui, glyphR, IconForType(a->type), t.textDim);
+            Slate::DrawIcon(ui, iconR, icon, iconColor);
         }
 
-        ui.LabelIn(labelR, a->assetName, t.text, Align::Center);
+        // Asset name (1 line, centered). Ellipsize if wider than card.
+        f32 nameX = card.x + 4.0f;
+        f32 nameY = card.y + kThumbH + 2.0f;
+        f32 nameW = card.w - 8.0f;
+        ui.LabelIn({nameX, nameY, nameW, 14.0f}, a->assetName,
+                   selected ? t.text : t.text, Align::Center);
+
+        // Asset type (smaller, dimmer, centered). Skipped for folders.
+        if (!a->IsFolder()) {
+            std::string_view typeName = AssetTypeName(a->type);
+            ui.LabelIn({nameX, nameY + 14.0f, nameW, 12.0f}, typeName,
+                       t.textDisabled, Align::Center);
+        }
     }
+    (void)kTextRowsH;  // layout constant kept for future tweaks
+    (void)f;  // future-proofing for ellipsizing
 }
 
 void ContentBrowserPanel::Draw(Slate::Context& ui, const Slate::Rect& body,
