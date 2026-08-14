@@ -14,11 +14,10 @@ FileSystemTreePanel::FileSystemTreePanel() = default;
 void FileSystemTreePanel::Draw(Slate::Context& ui, const Slate::Rect& rect,
                                const char* title) {
     Slate::Theme& t = ui.theme();
-    // Dark recessed panel: darker than the surrounding body surface so the
-    // fill alone defines the edge — no outline, so it doesn't read as a
-    // gray ring against the lighter body bg.
-    const Slate::Color panelBg = Slate::Darken(t.surface0, 0.25f);
-    ui.PanelRounded(rect, panelBg, t.radius.md);
+    // Folders column shares the same body bg as the surrounding content
+    // browser surface so its header reads as the same color as the other
+    // editor panels (no recessed dark fill).
+    ui.PanelRounded(rect, t.surface1, t.radius.md);
 
     // Clip rows to the panel rect so they never bleed past the column.
     ui.PushClip(rect);
