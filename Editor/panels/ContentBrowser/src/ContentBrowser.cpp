@@ -494,7 +494,7 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
     // Compute columns that fit the available width and start rows from
     // the top padding.
     constexpr f32 kPad = 12.0f;
-    constexpr f32 kThumbH = 70.0f;       // top thumbnail strip
+    constexpr f32 kThumbH = 102.0f;      // top thumbnail strip
     constexpr f32 kTextRowsH = kTileH - kThumbH;  // name + type rows
     const Slate::Font& f = ui.uiFont();
     f32 availW = rect.w - kPad * 2.0f;
