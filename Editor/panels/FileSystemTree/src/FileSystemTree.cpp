@@ -26,6 +26,12 @@ void FileSystemTreePanel::Draw(Slate::Context& ui, const Slate::Rect& rect,
     ui.Heading({rect.x + 6.0f, rect.y + 4.0f, rect.w - 12.0f, 22.0f}, title,
                t.text);
 
+    // Separator between the header and the folder list so the title
+    // reads as its own strip.
+    constexpr f32 kHeaderH = 28.0f;
+    ui.Panel({rect.x + 4.0f, rect.y + kHeaderH - 1.0f, rect.w - 8.0f, 1.0f},
+             t.separator);
+
     if (!m_registry) {
         ui.PopClip();
         return;
