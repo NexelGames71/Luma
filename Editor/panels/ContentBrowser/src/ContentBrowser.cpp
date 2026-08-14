@@ -459,7 +459,10 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
                                        const Slate::Rect& rect,
                                        PanelContext& /*ctx*/) {
     Slate::Theme& t = ui.theme();
-    ui.Panel(rect, t.windowBg);
+    // Light shadow background: the surrounding content-browser body
+    // (t.surface1) shows through, with a subtle dark inset so the grid
+    // reads as a softer, recessed area without a hard panel fill.
+    ui.Panel(rect, Slate::Darken(t.surface1, 0.10f));
 
     auto entries = CurrentEntries();
 
@@ -519,7 +522,9 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
                 m_selected = a->id;
             }
         }
-        // Tile background + glyph.
+        // Tile background + glyph. A soft drop shadow sits behind the
+        // card so it reads as a dark edge fading into the body.
+        ui.drawList().AddRectShadow(tile, t.radius.md, 0.5f, 4.0f);
         ui.PanelRounded(tile, selected ? t.accentMuted : t.surface2,
                         t.radius.md);
         ui.PanelRoundedBordered(tile, t.outline, t.outline, t.radius.md,
