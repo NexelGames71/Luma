@@ -14,16 +14,11 @@ FileSystemTreePanel::FileSystemTreePanel() = default;
 void FileSystemTreePanel::Draw(Slate::Context& ui, const Slate::Rect& rect,
                                const char* title) {
     Slate::Theme& t = ui.theme();
-    // Dark recessed panel: darker than the surrounding body surface so it
-    // reads as an inset folder panel inside its host. The border is a
-    // low-contrast blend toward the panel bg so it reads as a subtle
-    // inset edge, not a noticeable gray ring.
+    // Dark recessed panel: darker than the surrounding body surface so the
+    // fill alone defines the edge — no outline, so it doesn't read as a
+    // gray ring against the lighter body bg.
     const Slate::Color panelBg = Slate::Darken(t.surface0, 0.25f);
-    const Slate::Color panelBorder =
-        Slate::Mix(panelBg, t.outline, 0.4f);
     ui.PanelRounded(rect, panelBg, t.radius.md);
-    ui.PanelRoundedBordered(rect, panelBg, panelBorder, t.radius.md,
-                            0.5f);
 
     // Everything below is clipped to the panel so rows never bleed past
     // the rounded edges.
