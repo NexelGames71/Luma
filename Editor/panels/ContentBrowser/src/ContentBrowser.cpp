@@ -527,9 +527,12 @@ void ContentBrowserPanel::DrawGridPane(Slate::Context& ui,
         Rect glyphR{tile.x + 12.0f, tile.y + 12.0f, tile.w - 24.0f,
                     tile.h - 24.0f};
         if (a->IsFolder()) {
-            // Folder tile: use the supplied orange-tinted folder PNG when
-            // available; fall back to the procedural Icon::Folder glyph.
-            if (m_texFolder) {
+            // Folder tile: prefer the open-folder PNG (its built-in
+            // colors), then the legacy orange-tinted folder PNG, then the
+            // procedural Icon::Folder glyph.
+            if (m_texOpenFolder) {
+                ui.Image(m_texOpenFolder, glyphR);
+            } else if (m_texFolder) {
                 ui.Image(m_texFolder, glyphR, kFolderOrange);
             } else {
                 Slate::DrawIcon(ui, glyphR, Icon::Folder, kFolderOrange);
