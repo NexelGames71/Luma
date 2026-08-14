@@ -26,11 +26,14 @@ void FileSystemTreePanel::Draw(Slate::Context& ui, const Slate::Rect& rect,
     ui.Heading({rect.x + 6.0f, rect.y + 4.0f, rect.w - 12.0f, 22.0f}, title,
                t.text);
 
-    // Separator between the header and the folder list so the title
-    // reads as its own strip.
+    // Separator + darker strip under it so the header reads as its own
+    // band and the folder list below sits on a darker recessed surface.
     constexpr f32 kHeaderH = 28.0f;
     ui.Panel({rect.x + 4.0f, rect.y + kHeaderH - 1.0f, rect.w - 8.0f, 1.0f},
              t.separator);
+    Rect listR{rect.x, rect.y + kHeaderH, rect.w,
+               rect.Bottom() - (rect.y + kHeaderH)};
+    ui.Panel(listR, Slate::Darken(t.surface1, 0.3f));
 
     if (!m_registry) {
         ui.PopClip();
