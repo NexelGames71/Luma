@@ -57,9 +57,10 @@ public:
     void SetContentBrowserIcons(TextureHandle sortUp, TextureHandle sortDown,
                                 TextureHandle searchGlass,
                                 TextureHandle folder, TextureHandle reload,
-                                TextureHandle importTex) {
+                                TextureHandle importTex,
+                                TextureHandle openFolder) {
         m_contentBrowser.SetIcons(sortUp, sortDown, searchGlass, folder,
-                                   reload, importTex);
+                                   reload, importTex, openFolder);
     }
 
 private:

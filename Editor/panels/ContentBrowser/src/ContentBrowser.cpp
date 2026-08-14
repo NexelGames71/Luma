@@ -21,14 +21,17 @@ void ContentBrowserPanel::SetIcons(Luma::TextureHandle sortUp,
                                    Luma::TextureHandle searchGlass,
                                    Luma::TextureHandle folder,
                                    Luma::TextureHandle reload,
-                                   Luma::TextureHandle importTex) {
+                                   Luma::TextureHandle importTex,
+                                   Luma::TextureHandle openFolder) {
     m_texSortUp = sortUp;
     m_texSortDown = sortDown;
     m_texSearchGlass = searchGlass;
     m_texFolder = folder;
     m_texReload = reload;
     m_texImport = importTex;
+    m_texOpenFolder = openFolder;
     m_tree.SetFolderTexture(folder);
+    m_tree.SetOpenFolderTexture(openFolder);
 }
 
 void ContentBrowserPanel::ResetNavigation() {
@@ -566,7 +569,7 @@ void ContentBrowserPanel::Draw(Slate::Context& ui, const Slate::Rect& body,
     Rect treeSplit{}, gridSplit{};
     ui.SplitterV(Slate::Context::ID("cb.splitter"), bodyArea, m_treeRatio,
                  treeSplit, gridSplit, 1.0f);
-    constexpr f32 kTreeMargin = 6.0f;
+    constexpr f32 kTreeMargin = 3.0f;
     Rect treePane{treeSplit.x + kTreeMargin, bodyTop + kTreeMargin,
                   treeSplit.w - kTreeMargin * 2.0f,
                   bodyArea.h - kTreeMargin * 2.0f};

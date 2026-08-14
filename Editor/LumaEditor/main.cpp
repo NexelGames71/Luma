@@ -220,13 +220,14 @@ int main(int argc, char** argv) {
     TextureHandle iconStop = loadIcon("Icons/stop.png");
     TextureHandle iconLogo = loadIcon("luma_icon.png");
     // Content Browser chrome icons (sort arrows + search glass + folder +
-    // reload + import).
+    // reload + import + open-folder).
     TextureHandle cbSortUp = loadIcon("Icons/sort_up.png");
     TextureHandle cbSortDown = loadIcon("Icons/sort_down.png");
     TextureHandle cbSearchGlass = loadIcon("Icons/search_glass.png");
     TextureHandle cbFolder = loadIcon("Icons/folder_base.png");
     TextureHandle cbReload = loadIcon("Icons/reload.png");
     TextureHandle cbImport = loadIcon("Icons/import.png");
+    TextureHandle cbOpenFolder = loadIcon("Icons/open-folder.png");
 
     std::unique_ptr<EditorScreen> editor;
     SplashScreen splash;
@@ -235,7 +236,8 @@ int main(int argc, char** argv) {
         editor->SetToolbarIcons(iconPlay, iconPause, iconStop);
         editor->SetLogoIcon(iconLogo);
         editor->SetContentBrowserIcons(cbSortUp, cbSortDown, cbSearchGlass,
-                                       cbFolder, cbReload, cbImport);
+                                       cbFolder, cbReload, cbImport,
+                                       cbOpenFolder);
     }
 
     // Splash phase (editor mode only).

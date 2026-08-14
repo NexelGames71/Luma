@@ -85,10 +85,13 @@ void FileSystemTreePanel::DrawFolderRow(Slate::Context& ui,
         m_currentFolder = path;
         if (OnFolderSelected) OnFolderSelected(path);
     }
-    // Folder icon: supplied orange-tinted PNG when available, otherwise
+    // Folder icon: the open-folder PNG (drawn with its built-in colors)
+    // when available, otherwise the legacy orange-tinted folder PNG, then
     // the procedural Icon::Folder glyph.
     Rect ir{r.x + 2.0f, r.y + (kRowH - kIconSize) * 0.5f, kIconSize, kIconSize};
-    if (m_texFolder) {
+    if (m_texOpenFolder) {
+        ui.Image(m_texOpenFolder, ir);
+    } else if (m_texFolder) {
         ui.Image(m_texFolder, ir, kFolderOrange);
     } else {
         Slate::DrawIcon(ui, ir, Icon::Folder, kFolderOrange);
