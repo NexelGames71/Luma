@@ -20,12 +20,11 @@ void FileSystemTreePanel::Draw(Slate::Context& ui, const Slate::Rect& rect,
     const Slate::Color panelBg = Slate::Darken(t.surface0, 0.25f);
     ui.PanelRounded(rect, panelBg, t.radius.md);
 
-    // Everything below is clipped to the panel so rows never bleed past
-    // the rounded edges.
+    // Clip rows to the panel rect so they never bleed past the column.
     ui.PushClip(rect);
 
     // Header.
-    ui.Heading({rect.x + 12.0f, rect.y + 8.0f, rect.w - 24.0f, 22.0f}, title,
+    ui.Heading({rect.x + 6.0f, rect.y + 4.0f, rect.w - 12.0f, 22.0f}, title,
                t.text);
 
     if (!m_registry) {
@@ -33,7 +32,7 @@ void FileSystemTreePanel::Draw(Slate::Context& ui, const Slate::Rect& rect,
         return;
     }
 
-    f32 y = rect.y + 36.0f;
+    f32 y = rect.y + 28.0f;
     // Orange tint applied to the white folder PNG.
     const Slate::Color kFolderOrange{255, 178, 92, 255};
 
@@ -44,7 +43,7 @@ void FileSystemTreePanel::Draw(Slate::Context& ui, const Slate::Rect& rect,
         std::string name = root.filename().string();
         if (name.empty() || name == "Content") name = "Content";
         bool sel = m_currentFolder.empty() || m_currentFolder == root;
-        DrawFolderRow(ui, rect, name.c_str(), root, y, 8.0f, sel);
+        DrawFolderRow(ui, rect, name.c_str(), root, y, 4.0f, sel);
         if (y > rect.Bottom()) break;
         // Show direct child folders of this root when it's expanded
         // (i.e. selected here).
@@ -54,7 +53,7 @@ void FileSystemTreePanel::Draw(Slate::Context& ui, const Slate::Rect& rect,
                 if (!child->IsFolder()) continue;
                 bool csel = (m_currentFolder == child->packagePath);
                 DrawFolderRow(ui, rect, child->assetName.c_str(),
-                              child->packagePath, y, 24.0f, csel);
+                              child->packagePath, y, 20.0f, csel);
                 if (y > rect.Bottom()) break;
             }
         }
@@ -70,7 +69,7 @@ void FileSystemTreePanel::DrawFolderRow(Slate::Context& ui,
     constexpr f32 kIconSize = 16.0f;
     const Slate::Color kFolderOrange{255, 178, 92, 255};
 
-    Rect r{panel.x + indent, y, panel.w - indent - 8.0f, kRowH};
+    Rect r{panel.x + indent, y, panel.w - indent - 4.0f, kRowH};
     // Selectable handles hover fill + click detection; we set
     // currentFolder + fire the callback when it returns true.
     if (ui.Selectable(Slate::Context::ID(path.string().c_str()), r, label,
@@ -80,13 +79,13 @@ void FileSystemTreePanel::DrawFolderRow(Slate::Context& ui,
     }
     // Folder icon: supplied orange-tinted PNG when available, otherwise
     // the procedural Icon::Folder glyph.
-    Rect ir{r.x + 4.0f, r.y + (kRowH - kIconSize) * 0.5f, kIconSize, kIconSize};
+    Rect ir{r.x + 2.0f, r.y + (kRowH - kIconSize) * 0.5f, kIconSize, kIconSize};
     if (m_texFolder) {
         ui.Image(m_texFolder, ir, kFolderOrange);
     } else {
         Slate::DrawIcon(ui, ir, Icon::Folder, kFolderOrange);
     }
-    y += kRowH + 2.0f;
+    y += kRowH + 1.0f;
 }
 
 }  // namespace Luma::Editor::Panels
