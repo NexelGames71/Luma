@@ -276,13 +276,21 @@ Buffers, images, textures, staging/upload.
 ### 2.4 Materials  ·  🟡 PARTIAL
 PBR material params on `MeshRendererComponent` (albedo/metallic/roughness) + sky IBL.
 - [x] PBR shading model (metallic-roughness) with image-based lighting from sky
-- [ ] **Material** / **Material Instance** / **Shader** / **Texture** / **Parameter**
-      object model (data-driven, serialized) — decouple from the component
+- [x] **Material object model** — `Engine/Material`: kind-driven expression graph
+      (UE5.8 `UMaterialExpression` model), typed property sinks on `Material`,
+      `MaterialGraph` with stable ids, `MaterialCompiler` GLSL emitter
+      (UE `FMaterialCompiler`/`HLSLMaterialTranslator`), `.lmat` JSON serializer
+      (`MaterialSerializer`). Tests: `Tests/Material/MaterialTests.cpp`.
+- [ ] **Material Editor window** (Phase 2 — see 5.10)
+- [ ] Material Instance overrides / **Shader** / **Texture** / **Parameter** asset
+      wiring — textures bind through the material, not component fields
 - [ ] Texture-backed params (albedo/normal/metallic-roughness/AO/emissive maps)
 - [ ] Shader permutations by feature set
 - **DoD:** materials are assets referenced by meshes; a material instance overrides
   params; textures bind through the material, not hard-coded component fields.
-- **Log:** _shading model done; material object model pending (needs 5.6 asset system)._
+- **Log:** _shading model done; material graph + GLSL compiler + .lmat serializer
+  landed; editor window + renderer wiring pending (architecture in
+  `Luma_UE5_Material_Research/17_Architecture/luma_material_editor_architecture.md`)._
 
 ### 2.5 Meshes  ·  🟡 PARTIAL
 `Engine/Rendering/Mesh` — built-in primitives (cube/sphere/plane…) + PBR draw.
@@ -581,6 +589,22 @@ Dockable panels + branded menu bar exist.
 - [ ] Save/restore named layouts; reset-to-default; per-project layout in `Saved/`
 - **DoD:** users rearrange docks and restore layouts across sessions.
 - **Log:** _docking + menu bar done; layout persistence pending._
+
+### 5.10 Material Editor  ·  🔲 TODO  *(architecture done — see
+`Luma_UE5_Material_Research/17_Architecture/luma_material_editor_architecture.md`)*
+The UE5.8-mapped material graph editor: dockable panel opened from a `.lmat`
+asset (Content Browser double-click), backed by the Phase-1 `Engine/Material`
+module (graph + GLSL compiler + serializer).
+- [ ] Panel shell — canvas viewport + material header, open from Content Browser
+- [ ] Node canvas — procedural nodes, drag-move, select, pan/zoom
+- [ ] Searchable node palette (right-click canvas / `+`) → `AddNode` at cursor
+- [ ] Pin wiring — drag wire, type-checked connects, Bézier links
+- [ ] Details pane — node/material params via existing Inspector widgets
+- [ ] Live preview — recompile on edit, feed deferred renderer, error list
+- [ ] Dirty tracking + save (Ctrl+S / close prompt), comments, keyboard nav
+- **DoD:** edit a material graph in the dock, see live preview, save/reload `.lmat`
+  without leaving the editor.
+- **Log:** _data model + compiler + serializer done; UI phased per the doc._
 
 ---
 ---

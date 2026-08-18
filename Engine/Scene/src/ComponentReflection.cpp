@@ -76,6 +76,45 @@ const TypeInfo<LightComponent>& GetTypeInfo<LightComponent>() {
         b.Property("outerAngleDeg", &LightComponent::outerAngleDeg)
             .Category("Spot")
             .Range(0.0, 90.0);
+        // Sun disk (directional)
+        b.Property("sunDiskSizeDeg", &LightComponent::sunDiskSizeDeg)
+            .Category("Sun")
+            .Range(0.1, 15.0);
+        b.Property("sunDiskIntensity", &LightComponent::sunDiskIntensity)
+            .Category("Sun")
+            .Range(0.0, 10.0);
+        // Attenuation (point/spot/tube)
+        b.Property("attenuationRadius", &LightComponent::attenuationRadius)
+            .Category("Attenuation");
+        b.Property("attenuationPower", &LightComponent::attenuationPower)
+            .Category("Attenuation")
+            .Range(0.5, 4.0);
+        b.Property("length", &LightComponent::length)
+            .Category("Attenuation")
+            .Range(0.1, 20.0);
+        // Shadows
+        b.Property("castShadows", &LightComponent::castShadows).Category("Shadows");
+        b.Property("shadowMapSize", &LightComponent::shadowMapSize)
+            .Category("Shadows")
+            .Range(256, 4096);
+        b.Property("shadowBias", &LightComponent::shadowBias)
+            .Category("Shadows")
+            .Range(0.0, 0.05);
+        b.Property("normalBias", &LightComponent::normalBias)
+            .Category("Shadows")
+            .Range(0.0, 1.0);
+        b.Property("shadowSoftness", &LightComponent::shadowSoftness)
+            .Category("Shadows")
+            .Range(0.0, 8.0);
+        // Cascaded shadow maps (directional)
+        b.Property("cascadeCount", &LightComponent::cascadeCount)
+            .Category("Shadows")
+            .Range(1, 4);
+        b.Property("shadowDistance", &LightComponent::shadowDistance)
+            .Category("Shadows");
+        b.Property("cascadeSplitLambda", &LightComponent::cascadeSplitLambda)
+            .Category("Shadows")
+            .Range(0.0, 1.0);
         return b.Build();
     }();
     return info;
@@ -85,16 +124,27 @@ template <>
 const TypeInfo<EnvironmentComponent>& GetTypeInfo<EnvironmentComponent>() {
     static const TypeInfo<EnvironmentComponent> info = [] {
         TypeBuilder<EnvironmentComponent> b("Environment");
-        b.Property("sunDirection", &EnvironmentComponent::sunDirection).Category("Sky");
-        b.Property("sunColor", &EnvironmentComponent::sunColor).Category("Sky");
-        b.Property("groundColor", &EnvironmentComponent::groundColor).Category("Sky");
-        b.Property("turbidity", &EnvironmentComponent::turbidity)
-            .Category("Sky")
-            .Range(1.0, 10.0);
-        b.Property("sunIntensity", &EnvironmentComponent::sunIntensity).Category("Sky");
+        // Atmosphere
+        b.Property("skyEnabled", &EnvironmentComponent::skyEnabled).Category("Atmosphere");
+        b.Property("rayleighScattering", &EnvironmentComponent::rayleighScattering)
+            .Category("Atmosphere");
+        b.Property("rayleighScaleHeight", &EnvironmentComponent::rayleighScaleHeight)
+            .Category("Atmosphere");
+        b.Property("mieScattering", &EnvironmentComponent::mieScattering).Category("Atmosphere");
+        b.Property("mieAbsorption", &EnvironmentComponent::mieAbsorption).Category("Atmosphere");
+        b.Property("mieScaleHeight", &EnvironmentComponent::mieScaleHeight).Category("Atmosphere");
+        b.Property("mieAnisotropy", &EnvironmentComponent::mieAnisotropy)
+            .Category("Atmosphere")
+            .Range(0.0, 1.0);
+        b.Property("ozoneScale", &EnvironmentComponent::ozoneScale).Category("Atmosphere");
+        // Sky
         b.Property("skyIntensity", &EnvironmentComponent::skyIntensity).Category("Sky");
-        b.Property("sunSizeDegrees", &EnvironmentComponent::sunSizeDegrees).Category("Sky");
-        b.Property("skyEnabled", &EnvironmentComponent::skyEnabled).Category("Sky");
+        b.Property("saturation", &EnvironmentComponent::saturation).Category("Sky");
+        b.Property("exposure", &EnvironmentComponent::exposure).Category("Sky");
+        b.Property("skyTint", &EnvironmentComponent::skyTint).Category("Sky");
+        // Ground & Ambient
+        b.Property("groundColor", &EnvironmentComponent::groundColor).Category("Ground");
+        b.Property("iblIntensity", &EnvironmentComponent::iblIntensity).Category("Ambient");
         return b.Build();
     }();
     return info;

@@ -9,8 +9,14 @@
 #include "Luma/Core/Types.h"
 
 // The Luma project system. A project is a folder containing a `<Name>.luma`
-// descriptor plus standard subdirectories (Content, Config, Source, Saved).
-// The `.luma` file is an INI-style descriptor (parsed with Luma::Config).
+// descriptor plus standard subdirectories. Content lives directly at the
+// project root: source assets (meshes, textures, materials, scenes) in
+// `Assets/`, scratch/cache data (thumbnails, logs, derived files) in
+// `Intermediate/`, plus `Config/` and `Source/`. There is no `Content/` or
+// `Saved/` folder inside a project.
+// The `.luma` file is an INI-style descriptor (parsed with Luma::Config);
+// JSON-style descriptors (projectName/defaultScene) are also accepted on
+// load.
 
 namespace Luma {
 
@@ -44,23 +50,33 @@ public:
 
     const std::filesystem::path& ProjectFile() const { return m_projectFile; }
     std::filesystem::path RootDir() const { return m_projectFile.parent_path(); }
-    std::filesystem::path ContentDir() const { return RootDir() / "Content"; }
+
+    // Content root — source assets live directly under the project folder in
+    // `Assets/` (meshes, textures, materials, scenes, audio, scripts).
+    std::filesystem::path AssetsDir() const { return RootDir() / "Assets"; }
     std::filesystem::path ConfigDir() const { return RootDir() / "Config"; }
     std::filesystem::path SourceDir() const { return RootDir() / "Source"; }
-    std::filesystem::path SavedDir() const { return RootDir() / "Saved"; }
-    std::filesystem::path ScenesDir() const { return ContentDir() / "Scenes"; }
+    // Scratch/cache area at the project root: thumbnails, logs, screenshots,
+    // derived data. The engine's legacy "Saved" concept maps here too.
+    std::filesystem::path IntermediateDir() const { return RootDir() / "Intermediate"; }
+    std::filesystem::path SavedDir() const { return IntermediateDir(); }
+    std::filesystem::path ScenesDir() const { return AssetsDir() / "Scenes"; }
 
-    // The startup scene, stored in the descriptor as a project-relative path
-    // (e.g. "Content/Scenes/Main.lscene"). May be empty on older projects.
+    // The startup scene, stored in the descriptor either as a project-relative
+    // path (e.g. "Assets/Scenes/Main.lscene") or as a bare filename
+    // (e.g. "Main.lscene"), which resolves under Assets/Scenes. May be empty
+    // on older projects.
     const std::string& StartupScene() const { return m_startupScene; }
 
-    // Absolute path to the startup scene; falls back to Scenes/Main.lscene when
-    // the descriptor does not name one, so there is always a usable target.
+    // Absolute path to the startup scene; falls back to Assets/Scenes/Main.lscene
+    // when the descriptor does not name one, so there is always a usable target.
     std::filesystem::path StartupScenePath() const {
         if (m_startupScene.empty()) {
             return ScenesDir() / (std::string("Main") + kSceneExtension);
         }
-        return RootDir() / m_startupScene;
+        std::filesystem::path rel(m_startupScene);
+        if (rel.has_parent_path()) return RootDir() / rel;
+        return ScenesDir() / rel;
     }
 
     // Creates the project folder, standard subdirectories and the .luma file.
@@ -76,7 +92,7 @@ private:
     std::string m_name;
     GameTemplate m_template = GameTemplate::Empty;
     std::string m_engineVersion;
-    std::string m_startupScene;  // project-relative, e.g. Content/Scenes/Main.lscene
+    std::string m_startupScene;  // e.g. Assets/Scenes/Main.lscene or Main.lscene
     std::filesystem::path m_projectFile;
 };
 

@@ -45,10 +45,10 @@ TEST_CASE("Project::Create builds the folder layout and .luma", "[project]") {
     REQUIRE(project->Template() == Luma::GameTemplate::ThirdPerson);
     REQUIRE(fs::exists(project->ProjectFile()));
     REQUIRE(project->ProjectFile().filename() == "AncientSimulation.luma");
-    REQUIRE(fs::is_directory(project->ContentDir()));
+    REQUIRE(fs::is_directory(project->AssetsDir()));
     REQUIRE(fs::is_directory(project->ConfigDir()));
     REQUIRE(fs::is_directory(project->SourceDir()));
-    REQUIRE(fs::is_directory(project->SavedDir()));
+    REQUIRE(fs::is_directory(project->IntermediateDir()));
 }
 
 TEST_CASE("Project::Load round-trips a created project", "[project]") {
@@ -106,7 +106,7 @@ TEST_CASE("Project::Create sets up a Scenes dir and startup scene", "[project]")
     REQUIRE(project.has_value());
 
     REQUIRE(fs::is_directory(project->ScenesDir()));
-    REQUIRE(project->ScenesDir() == project->ContentDir() / "Scenes");
+    REQUIRE(project->ScenesDir() == project->AssetsDir() / "Scenes");
     REQUIRE_FALSE(project->StartupScene().empty());
     // The startup scene resolves under the project's Scenes dir.
     fs::path scenePath = project->StartupScenePath();

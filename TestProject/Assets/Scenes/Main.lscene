@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "entities": [
+    {
+      "components": {
+        "Name": {
+          "name": "Environment"
+        },
+        "Transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotationEuler": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Environment": {
+          "skyEnabled": true,
+          "rayleighScattering": [
+            5.80000005356851e-06,
+            1.359999987471383e-05,
+            3.310000101919286e-05
+          ],
+          "rayleighScaleHeight": 8000,
+          "mieScattering": 3.9960000322025735e-06,
+          "mieAbsorption": 4.399999852466863e-06,
+          "mieScaleHeight": 1200,
+          "mieAnisotropy": 0.800000011920929,
+          "ozoneScale": 1,
+          "skyIntensity": 1,
+          "saturation": 1.25,
+          "exposure": 2.4000000953674316,
+          "skyTint": [
+            1,
+            1,
+            1
+          ],
+          "groundColor": [
+            0.10999999940395355,
+            0.11999999731779099,
+            0.14000000059604645
+          ],
+          "iblIntensity": 1
+        }
+      }
+    }
+  ]
+}

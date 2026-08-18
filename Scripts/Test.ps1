@@ -1,4 +1,4 @@
-# Runs the automated test suite. Usage: Test.ps1 [-Config Development]
+or # Runs the automated test suite. Usage: Test.ps1 [-Config Development]
 param([string]$Config = "Development")
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent

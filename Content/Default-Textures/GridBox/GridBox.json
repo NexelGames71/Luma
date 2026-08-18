@@ -1,0 +1,48 @@
+{
+  "name": "GridBox",
+  "type": "procedural_material",
+  "version": 1,
+  "textures": {
+    "baseColor": "Textures/GridBox_BaseColor.png",
+    "normal": "Textures/GridBox_Normal.png",
+    "roughness": "Textures/GridBox_Roughness.png",
+    "metallic": "Textures/GridBox_Metallic.png",
+    "height": "Textures/GridBox_Height.png",
+    "ao": "Textures/GridBox_AO.png"
+  },
+  "parameters": {
+    "gridSize": 4,
+    "tileWidth": 0.95,
+    "tileHeight": 0.95,
+    "lineThickness": 0.03,
+    "lineSoftness": 0.015,
+    "offsetX": 0.0,
+    "offsetY": 0.0,
+    "baseColor": [
+      0.75,
+      0.73,
+      0.7
+    ],
+    "baseColor2": [
+      0.33725491166114807,
+      0.32549020648002625,
+      0.30980393290519714
+    ],
+    "lineColor": [
+      0.16862745583057404,
+      0.16862745583057404,
+      0.16862745583057404
+    ],
+    "roughness": 0.4,
+    "metallic": 0.098,
+    "normalStrength": 1.118,
+    "heightStrength": 0.137,
+    "noiseAmount": 0.08,
+    "noiseScale": 35.0,
+    "roughnessVariation": 0.15,
+    "colorVariation": 0.0,
+    "edgeWear": 0.0,
+    "dirtAmount": 0.299,
+    "seed": 1337
+  }
+}

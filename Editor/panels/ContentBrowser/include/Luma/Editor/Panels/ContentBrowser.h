@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Luma/Asset/AssetData.h"
@@ -38,6 +39,9 @@ public:
     // caller (EditorScreen) decides when to Scan() / RefreshPath().
     void SetRegistry(AssetRegistry* registry) { m_registry = registry; }
     AssetRegistry* Registry() const noexcept { return m_registry; }
+    
+    // Wire renderer for thumbnail generation
+    void SetRenderer(Luma::Renderer* renderer);
 
     // Loads the chrome PNGs the panel wants (sort up/down, search glass,
     // folder, reload, import, open-folder). Called once by EditorScreen
@@ -49,21 +53,41 @@ public:
                   Luma::TextureHandle folder,
                   Luma::TextureHandle reload,
                   Luma::TextureHandle importTex,
-                  Luma::TextureHandle openFolder);
+                  Luma::TextureHandle openFolder,
+                  Luma::TextureHandle expandArrow,
+                  Luma::TextureHandle retractArrow);
 
     // Clears the navigation stack (e.g. after the project is reloaded).
     void ResetNavigation();
 
     void Draw(Slate::Context& ui, const Slate::Rect& body, PanelContext& ctx);
 
+    // Right-click create menu overlay — drawn by EditorScreen AFTER the
+    // dock (like the outliner's create menu) so it isn't clipped to this
+    // panel's rect. No-op when the menu isn't open.
+    void DrawFloatingMenu(Slate::Context& ui, PanelContext& ctx);
+
+    // Selects the given asset (single-click selection, not activation).
+    void SetSelected(const AssetId& id) { m_selected = id; }
+
     // The asset the user last activated (double-clicked). EditorScreen
     // reads this to drive the inspector / preview.
     AssetId Selected() const noexcept { return m_selected; }
+
+    // The asset the user double-clicked this frame (single-click selection
+    // stays in Selected()). EditorScreen polls this to open the right
+    // editor (e.g. Material Editor for .lmat). Cleared by ClearActivated().
+    AssetId Activated() const noexcept { return m_activated; }
+    void ClearActivated() { m_activated = AssetId{}; }
 
     // The folder the right pane is currently displaying (root if empty).
     std::filesystem::path CurrentFolder() const noexcept {
         return m_currentFolder;
     }
+    
+    // Thumbnail helpers
+    u64 GetThumbnailTexture(const AssetId& assetId, const std::filesystem::path& nativePath, Luma::Renderer* renderer);
+    void RequestThumbnail(const AssetId& assetId, const std::filesystem::path& nativePath);
 
 private:
     // Per-frame state mutated by Draw.
@@ -72,6 +96,7 @@ private:
     std::string m_nameFilter;
     std::optional<AssetType> m_typeFilter;  // nullopt = all
     AssetId m_selected{};
+    AssetId m_activated{};  // double-clicked this frame
 
     // Reusable folder tree (draws the dark inset "Folders" panel and
     // reports the selected folder via OnFolderSelected). Kept in sync
@@ -86,6 +111,9 @@ private:
     // filters is open. Toggled by the down/up chevron button inside the
     // search bar; dismissed by selection or outside-click.
     bool m_filterMenuOpen = false;
+    // Vertical scroll offset of the asset grid (px). Clamped to the grid's
+    // content height by VerticalScroll each frame.
+    f32 m_gridScroll = 0.0f;
     // True between a press over a breadcrumb segment and its release, so a
     // press-then-drag-off release doesn't navigate.
     bool m_breadPressed = false;
@@ -99,6 +127,19 @@ private:
     // anchors below it. Refreshed by DrawToolbar each frame.
     Slate::Rect m_filterAnchor{};
 
+    // Right-click "Create" context menu state. The menu floats (drawn by
+    // DrawFloatingMenu after the dock) so it isn't clipped to the panel.
+    bool m_contextMenuOpen = false;
+    bool m_contextMenuOpenedThisFrame = false;
+    Slate::Vec2 m_contextMenuPos{};  // anchor (screen coords)
+    std::string m_contextSearch;
+    int m_contextHover = -1;      // hovered row (flat index, -1 = none)
+    int m_contextFocus = -1;      // keyboard focus (flat index, -1 = none)
+    int m_contextSubmenu = -1;    // open category index (-1 = none)
+    u64 m_pressedCreateRow = 0;  // press-tracking id for menu rows
+    // Body rect cached by Draw so the floating pass can clamp the menu.
+    Slate::Rect m_bodyRect{};
+
     // Loaded textures supplied by EditorScreen; 0 = not loaded. The sort
     // up/down PNGs are kept for API stability but the toolbar chevron is
     // drawn with procedural icons (crisp at any DPI).
@@ -109,6 +150,14 @@ private:
     Luma::TextureHandle m_texReload = 0;
     Luma::TextureHandle m_texImport = 0;
     Luma::TextureHandle m_texOpenFolder = 0;
+    Luma::TextureHandle m_texExpandArrow = 0;
+    Luma::TextureHandle m_texRetractArrow = 0;
+
+    // Renderer for thumbnail generation
+    Luma::Renderer* m_renderer = nullptr;
+    
+    // Thumbnail cache (asset ID -> texture handle)
+    std::unordered_map<AssetId, u64> m_thumbnailCache;
 
     // Layout constants.
     static constexpr f32 kToolbarH = 36.0f;
@@ -126,6 +175,12 @@ private:
     // m_filterMenuOpen is false; handles outside-click to close and
     // updates m_typeFilter on selection.
     void DrawFilterMenu(Slate::Context& ui, const Slate::Rect& anchor);
+    // Draws the right-click create menu (Unreal-style: search + GET section
+    // with Import, CREATE section with New Folder / Material, then a
+    // categorized list whose rows open a submenu beside them). Called from
+    // DrawFloatingMenu.
+    void DrawCreateMenu(Slate::Context& ui, PanelContext& ctx,
+                        bool openedThisFrame);
 
     // Returns the entries the right pane should currently show, applying
     // name + type + folder filters via the registry.

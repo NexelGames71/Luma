@@ -13,6 +13,15 @@ namespace Luma::Math {
 constexpr f32 kPi = 3.14159265358979323846f;
 constexpr f32 Radians(f32 degrees) { return degrees * (kPi / 180.0f); }
 
+struct Vec2 {
+    f32 x = 0, y = 0;
+    Vec2() = default;
+    Vec2(f32 x_, f32 y_) : x(x_), y(y_) {}
+    Vec2 operator+(const Vec2& o) const { return {x + o.x, y + o.y}; }
+    Vec2 operator-(const Vec2& o) const { return {x - o.x, y - o.y}; }
+    Vec2 operator*(f32 s) const { return {x * s, y * s}; }
+};
+
 struct Vec3 {
     f32 x = 0, y = 0, z = 0;
     Vec3() = default;
@@ -20,6 +29,15 @@ struct Vec3 {
     Vec3 operator+(const Vec3& o) const { return {x + o.x, y + o.y, z + o.z}; }
     Vec3 operator-(const Vec3& o) const { return {x - o.x, y - o.y, z - o.z}; }
     Vec3 operator*(f32 s) const { return {x * s, y * s, z * s}; }
+};
+
+struct Vec4 {
+    f32 x = 0, y = 0, z = 0, w = 0;
+    Vec4() = default;
+    Vec4(f32 x_, f32 y_, f32 z_, f32 w_) : x(x_), y(y_), z(z_), w(w_) {}
+    Vec4 operator+(const Vec4& o) const { return {x + o.x, y + o.y, z + o.z, w + o.w}; }
+    Vec4 operator-(const Vec4& o) const { return {x - o.x, y - o.y, z - o.z, w - o.w}; }
+    Vec4 operator*(f32 s) const { return {x * s, y * s, z * s, w * s}; }
 };
 
 inline f32 Dot(const Vec3& a, const Vec3& b) {

@@ -11,6 +11,6 @@ target_include_directories(LumaPanelFileSystemTree
         ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 
 target_link_libraries(LumaPanelFileSystemTree
-    PUBLIC Luma::Core Luma::Asset Luma::Slate)
+    PUBLIC Luma::Core Luma::Asset Luma::Scene Luma::Slate)
 
 set_target_properties(LumaPanelFileSystemTree PROPERTIES FOLDER "Editor/Panels")

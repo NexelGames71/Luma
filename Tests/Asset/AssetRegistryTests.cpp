@@ -226,7 +226,7 @@ TEST_CASE("Multiple roots are all indexed", "[asset][registry]") {
     REQUIRE(r.LookupByPath(b.Path() / "b.png") != nullptr);
 }
 
-TEST_CASE("DisplayPathFor strips the root and prefixes 'Content/'",
+TEST_CASE("DisplayPathFor strips the root and prefixes 'Assets/'",
           "[asset][registry][display]") {
     TempDir dir;
     dir.Touch("Textures/hero.png");
@@ -235,7 +235,7 @@ TEST_CASE("DisplayPathFor strips the root and prefixes 'Content/'",
     r.Scan();
     auto abs = dir.Path() / "Textures" / "hero.png";
     auto display = r.DisplayPathFor(abs);
-    REQUIRE(display == "Content/Textures/hero.png");
+    REQUIRE(display == "Assets/Textures/hero.png");
 }
 
 TEST_CASE("DisplayPathFor falls back to the absolute path when no root matches",
@@ -252,5 +252,5 @@ TEST_CASE("DisplayPathFor handles the root itself", "[asset][registry][display]"
     AssetRegistry r;
     r.AddRoot(dir.Path());
     auto display = r.DisplayPathFor(dir.Path());
-    REQUIRE(display == "Content/");
+    REQUIRE(display == "Assets/");
 }

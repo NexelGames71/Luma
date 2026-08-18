@@ -34,6 +34,22 @@ struct BorderWidths {
 struct Motion {
     f32 hover = 14.0f, press = 22.0f, popup = 18.0f;  // per-second lerp factors
 };
+// Popup-menu tokens (World Outliner create menu, context menus). Rows share
+// the menu surface (surface4); hover/focus fills sit one step lower on the
+// surface ramp so they read as raised interaction states against it.
+struct Menu {
+    f32 rowH = 24.0f;       // menu row height
+    f32 headerH = 20.0f;    // section header height
+    f32 iconInset = 8.0f;   // leading icon inset from the row's left edge
+    f32 searchH = 24.0f;    // search-box height
+    f32 sectionGap = 12.0f; // vertical gap before a section header
+    Color hoverFill;        // row hover (darker than the surface4 menu bg)
+    Color focusFill;        // keyboard-focus row (slightly lighter than hover)
+    // Unreal-style selected-row highlight (saturated accent fill + light
+    // text), used by hovered/open/keyboard-focused menu rows.
+    Color highlightFill;
+    Color highlightText;
+};
 
 // Typography scale. Pixel sizes are tuned for a 96 DPI baseline; the renderer
 // scales by display DPI at bake time. Weights are Inter-grade names (Regular
@@ -114,6 +130,9 @@ struct Theme {
     BorderWidths border;
     Motion motion;
     Typography type;
+
+    // -- Menus / popups --
+    Menu menu;
 };
 
 Theme DarkTheme();

@@ -25,7 +25,7 @@ layout(binding = 0) uniform SceneUBO {
     vec4 skyHorizon;
     vec4 groundColor;
     vec4 params;         // x=iblIntensity, y=lightCount, z=sunShadows, w=1/size
-    vec4 shadowParams;   // x=softness, y=cascadeCount
+    vec4 shadowParams;   // x=softness, y=cascadeCount, z=shadowBias, w=normalBias
     vec4 cascadeSplits;  // per-cascade far view-depth
     mat4 cascadeViewProj[MAX_CASCADES];
     Light lights[MAX_LIGHTS];
@@ -105,6 +105,10 @@ float sunShadow(vec3 N, vec3 L) {
     // Larger bias for farther, coarser cascades.
     float bias = max(0.0018 * (1.0 - max(dot(N, L), 0.0)), 0.0004) *
                  (1.0 + float(cascade) * 0.6);
+    bias = max(bias, u.shadowParams.z);
+    // Normal bias: nudge the receiver toward the light along the normal so
+    // grazing-angle slopes don't self-shadow (acne).
+    proj.xy -= (N.xy / max(abs(proj.z), 1e-4)) * u.shadowParams.w;
     return pcss(cascade, proj, bias);
 }
 
@@ -197,7 +201,8 @@ void main() {
             float range = max(lt.dirRange.w, 1e-3);
             float rf = clamp(1.0 - pow(dist / range, 4.0), 0.0, 1.0);
             atten = (rf * rf) / max(dist * dist, 1e-4);
-            if (type == 2) {  // spot cone
+            if (type == 2) {  // spot cone (tube = 3 stays a point light)
+
                 float cosA = dot(-L, normalize(lt.dirRange.xyz));
                 atten *= smoothstep(lt.spot.y, lt.spot.x, cosA);
             }

@@ -179,6 +179,20 @@ void GlfwWindow::InstallCallbacks() {
         MouseScrolledEvent e(static_cast<f32>(xOff), static_cast<f32>(yOff));
         data->callback(e);
     });
+
+    glfwSetDropCallback(m_window, [](GLFWwindow* w, int count, const char** paths) {
+        auto* data = DataFrom(w);
+        if (!data || !data->callback || count <= 0 || !paths) return;
+        std::vector<std::filesystem::path> droppedFiles;
+        droppedFiles.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            if (paths[i]) droppedFiles.emplace_back(paths[i]);
+        }
+        if (!droppedFiles.empty()) {
+            WindowDropEvent e(std::move(droppedFiles));
+            data->callback(e);
+        }
+    });
 }
 
 void GlfwWindow::PollEvents() { glfwPollEvents(); }

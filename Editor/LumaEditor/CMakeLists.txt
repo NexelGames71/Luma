@@ -11,15 +11,17 @@ add_executable(LumaEditor
 # LumaEditor needs the same include roots so it can include the public API.
 target_include_directories(LumaEditor
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/Editor/panels)
+        ${CMAKE_SOURCE_DIR}/Editor/panels
+        ${CMAKE_SOURCE_DIR}/Engine/Rendering/Vulkan/include
+        ${CMAKE_SOURCE_DIR}/Engine/Rendering/Vulkan/src)
 
 target_link_libraries(LumaEditor
     PRIVATE Luma::Core Luma::Math Luma::Platform Luma::RenderVulkan Luma::Slate
             Luma::Project Luma::ProjectBrowser Luma::Grid Luma::Scene
-            Luma::Gizmo Luma::VFS Luma::Asset
+            Luma::Gizmo Luma::VFS Luma::Asset Luma::Renderer
             Luma::PanelWorldOutliner Luma::PanelViewport Luma::PanelInspector
             Luma::PanelConsole Luma::PanelContentBrowser
-            Luma::PanelFileSystemTree)
+            Luma::PanelFileSystemTree Luma::PanelMaterialEditor)
 
 set_target_properties(LumaEditor PROPERTIES
     OUTPUT_NAME "LumaEditor"

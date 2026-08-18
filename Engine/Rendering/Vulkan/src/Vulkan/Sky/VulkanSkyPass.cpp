@@ -1,34 +1,81 @@
 #include "Vulkan/Sky/VulkanSkyPass.h"
 
 #include <cmath>
+#include <cstring>
 
+#include "Vulkan/Sky/AtmosphereParams.h"
 #include "Vulkan/VulkanShader.h"
 
 namespace Luma {
 namespace {
 
-// Matches the push_constant block in sky.vert/sky.frag (128 bytes, within the
-// guaranteed 128-byte push-constant minimum).
+// Matches the push_constant block in sky.vert/sky.frag (80 bytes).
 struct SkyPush {
     Math::Mat4 invViewProj;
     f32 cameraPos[4];
-    f32 sunDir[4];  // xyz dir to sun, w = below-horizon fade
-    f32 params[4];  // turbidity, sunIntensity, cosSunRadius, skyIntensity
-    f32 ground[4];  // rgb
 };
 
 }  // namespace
 
-VulkanSkyPass::VulkanSkyPass(VkDevice device, const std::string& shaderDir,
+VulkanSkyPass::VulkanSkyPass(VkPhysicalDevice physical, VkDevice device,
+                             const std::string& shaderDir,
                              VkSampleCountFlagBits samples, VkFormat colorFormat,
                              VkFormat depthFormat)
     : m_device(device) {
+    // Atmosphere params UBO (set 0) — the push constant stays small so the
+    // pass works on devices with the minimum 128-byte push-constant limit.
+    m_ubo = CreateBuffer(physical, device, sizeof(Rendering::AtmosphereParams),
+                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         true);
+
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutCreateInfo slInfo{};
+    slInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    slInfo.bindingCount = 1;
+    slInfo.pBindings = &binding;
+    VK_CHECK(vkCreateDescriptorSetLayout(device, &slInfo, nullptr, &m_setLayout));
+
+    VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1};
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.maxSets = 1;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    VK_CHECK(vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_pool));
+
+    VkDescriptorSetAllocateInfo setAlloc{};
+    setAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    setAlloc.descriptorPool = m_pool;
+    setAlloc.descriptorSetCount = 1;
+    setAlloc.pSetLayouts = &m_setLayout;
+    VK_CHECK(vkAllocateDescriptorSets(device, &setAlloc, &m_set));
+
+    VkDescriptorBufferInfo bufInfo{m_ubo.buffer, 0,
+                                   sizeof(Rendering::AtmosphereParams)};
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = m_set;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.pBufferInfo = &bufInfo;
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+
+    // Push constants: camera matrices only (invViewProj + cameraPos, 80 bytes).
     VkPushConstantRange push{};
     push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     push.offset = 0;
     push.size = sizeof(SkyPush);
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.setLayoutCount = 1;
+    layoutInfo.pSetLayouts = &m_setLayout;
     layoutInfo.pushConstantRangeCount = 1;
     layoutInfo.pPushConstantRanges = &push;
     VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &m_layout));
@@ -121,6 +168,10 @@ VulkanSkyPass::VulkanSkyPass(VkDevice device, const std::string& shaderDir,
 VulkanSkyPass::~VulkanSkyPass() {
     if (m_pipeline) vkDestroyPipeline(m_device, m_pipeline, nullptr);
     if (m_layout) vkDestroyPipelineLayout(m_device, m_layout, nullptr);
+    if (m_pool) vkDestroyDescriptorPool(m_device, m_pool, nullptr);
+    if (m_setLayout)
+        vkDestroyDescriptorSetLayout(m_device, m_setLayout, nullptr);
+    if (m_ubo.buffer) DestroyBuffer(m_device, m_ubo);
 }
 
 void VulkanSkyPass::Record(VkCommandBuffer cmd, const SkyParams& sky,
@@ -129,13 +180,9 @@ void VulkanSkyPass::Record(VkCommandBuffer cmd, const SkyParams& sky,
     Mat4 invView = Inverse(view);
     Mat4 invViewProj = Inverse(viewProj);
 
-    Vec3 sunDir = Normalize(sky.sunDirection);
-    // Fade the analytic sky out as the sun drops below the horizon (Preetham is
-    // invalid there); smooth over a few degrees of elevation.
-    f32 fade = (sunDir.y - (-0.02f)) / (0.12f - (-0.02f));
-    fade = fade < 0.0f ? 0.0f : (fade > 1.0f ? 1.0f : fade);
-
-    f32 sunRadius = sky.sunSizeDegrees * 0.5f * (kPi / 180.0f);
+    Rendering::AtmosphereParams params;
+    Rendering::FillAtmosphereParams(params, sky);
+    std::memcpy(m_ubo.mapped, &params, sizeof(params));
 
     SkyPush pc{};
     pc.invViewProj = invViewProj;
@@ -143,20 +190,10 @@ void VulkanSkyPass::Record(VkCommandBuffer cmd, const SkyParams& sky,
     pc.cameraPos[1] = invView.m[13];
     pc.cameraPos[2] = invView.m[14];
     pc.cameraPos[3] = 1.0f;
-    pc.sunDir[0] = sunDir.x;
-    pc.sunDir[1] = sunDir.y;
-    pc.sunDir[2] = sunDir.z;
-    pc.sunDir[3] = fade;
-    pc.params[0] = sky.turbidity;
-    pc.params[1] = sky.sunIntensity;
-    pc.params[2] = std::cos(sunRadius);
-    pc.params[3] = sky.skyIntensity;
-    pc.ground[0] = sky.groundColor.x;
-    pc.ground[1] = sky.groundColor.y;
-    pc.ground[2] = sky.groundColor.z;
-    pc.ground[3] = 1.0f;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, 0, 1,
+                            &m_set, 0, nullptr);
     vkCmdPushConstants(cmd, m_layout,
                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(SkyPush), &pc);

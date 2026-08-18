@@ -36,12 +36,12 @@ Theme DarkTheme() {
     t.surface3 = Color::RGB(63, 63, 70);   // raised (button resting)
     t.surface4 = Color::RGB(80, 80, 86);   // popups / headers
 
-    // Refined Luma-blue accent ramp.
-    t.accent = Color::RGB(64, 142, 240);
-    t.accentHover = Color::RGB(88, 162, 255);
-    t.accentActive = Color::RGB(46, 116, 208);
-    t.accentMuted = Color::RGB(31, 60, 100);
-    t.accentText = Color::RGB(247, 250, 255);
+    // Unreal-style orange accent ramp.
+    t.accent = Color::RGB(255, 140, 0);
+    t.accentHover = Color::RGB(255, 170, 50);
+    t.accentActive = Color::RGB(220, 110, 0);
+    t.accentMuted = Color::RGB(100, 55, 0);
+    t.accentText = Color::RGB(255, 230, 200);
 
     // Semantic.
     t.separator = Color::RGB(20, 20, 20);
@@ -74,6 +74,17 @@ Theme DarkTheme() {
     t.cardSelected = t.accentMuted;
     t.caret = t.text;
     t.rounding = t.radius.md;
+
+    // Menu rows sit on the surface4 popup; hover = surface3 (darker, visible
+    // against the raised menu bg), focus = one step lighter than hover so the
+    // keyboard-focus row reads as a distinct state (plus the orange accent
+    // bar the caller draws).
+    t.menu.hoverFill = t.surface3;
+    t.menu.focusFill = Lighten(t.surface3, 0.08f);
+    // Unreal-style row highlight: vivid Luma-orange fill with white text
+    // (Unreal uses its blue; we keep the orange identity).
+    t.menu.highlightFill = Color::RGB(186, 103, 12);
+    t.menu.highlightText = Color::RGB(255, 255, 255);
 
     return t;
 }

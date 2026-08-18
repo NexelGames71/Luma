@@ -1,6 +1,7 @@
 #include "Luma/Project/Project.h"
 
 #include <fstream>
+#include <iterator>
 #include <system_error>
 
 #include "Luma/Core/Config.h"
@@ -67,6 +68,52 @@ void SetError(std::string* out, std::string message) {
     if (out) *out = std::move(message);
 }
 
+// Minimal JSON descriptor reader: extracts the string value of `key` from a
+// JSON object ("key": "value"), used so .luma files written as JSON (with
+// projectName/defaultScene) load alongside the canonical INI form. Returns
+// empty when the key is absent.
+std::string JsonStringValue(std::string_view text, std::string_view key) {
+    std::string needle = "\"";
+    needle += key;
+    needle += "\"";
+    usize pos = text.find(needle);
+    if (pos == std::string_view::npos) return {};
+    pos += needle.size();
+    // Skip whitespace + ':' + whitespace.
+    while (pos < text.size() &&
+           (text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\n' ||
+            text[pos] == '\r'))
+        ++pos;
+    if (pos >= text.size() || text[pos] != ':') return {};
+    ++pos;
+    while (pos < text.size() &&
+           (text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\n' ||
+            text[pos] == '\r'))
+        ++pos;
+    if (pos >= text.size() || text[pos] != '\"') return {};
+    ++pos;
+    std::string out;
+    while (pos < text.size() && text[pos] != '\"') {
+        if (text[pos] == '\\' && pos + 1 < text.size()) {
+            out.push_back(text[pos + 1]);  // unescape \" \\ \/ etc. simply
+            pos += 2;
+            continue;
+        }
+        out.push_back(text[pos]);
+        ++pos;
+    }
+    return out;
+}
+
+// True when `text` looks like a JSON object (first non-whitespace char '{').
+bool LooksLikeJson(std::string_view text) {
+    for (char c : text) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') continue;
+        return c == '{';
+    }
+    return false;
+}
+
 }  // namespace
 
 std::optional<Project> Project::Create(const ProjectDesc& desc,
@@ -89,8 +136,8 @@ std::optional<Project> Project::Create(const ProjectDesc& desc,
         return std::nullopt;
     }
 
-    for (const char* sub :
-         {"", "Content", "Content/Scenes", "Config", "Source", "Saved"}) {
+    for (const char* sub : {"", "Assets", "Assets/Scenes", "Config", "Source",
+                           "Intermediate"}) {
         fs::create_directories(root / sub, ec);
         if (ec) {
             SetError(outError, "failed to create " + (root / sub).string() +
@@ -101,7 +148,7 @@ std::optional<Project> Project::Create(const ProjectDesc& desc,
 
     // Default startup scene path, stored project-relative with forward slashes.
     const std::string startupScene =
-        std::string("Content/Scenes/Main") + kSceneExtension;
+        std::string("Assets/Scenes/Main") + kSceneExtension;
 
     const std::string version = CurrentEngineVersionString();
     {
@@ -131,16 +178,37 @@ std::optional<Project> Project::Load(const fs::path& lumaFile,
         return std::nullopt;
     }
 
+    Project project;
+    project.m_projectFile = fs::absolute(lumaFile, ec);
+    const std::string nameFallback = lumaFile.stem().string();
+
+    // Peek at the descriptor: JSON-style (.luma written with projectName /
+    // defaultScene keys) is read with the lightweight extractor; the
+    // canonical INI form goes through Config.
+    std::ifstream in(lumaFile, std::ios::binary);
+    std::string contents((std::istreambuf_iterator<char>(in)),
+                         std::istreambuf_iterator<char>());
+    if (LooksLikeJson(contents)) {
+        project.m_name =
+            JsonStringValue(contents, "projectName").empty()
+                ? nameFallback
+                : JsonStringValue(contents, "projectName");
+        project.m_engineVersion =
+            JsonStringValue(contents, "engineVersion");
+        project.m_template = GameTemplate::Empty;  // JSON form carries no template
+        project.m_startupScene = JsonStringValue(contents, "defaultScene");
+        LUMA_LOG_INFO("Project", "loaded project '{}' (engine {}, JSON descriptor)",
+                      project.m_name, project.m_engineVersion);
+        return project;
+    }
+
     Config config;
     if (!config.LoadFromFile(lumaFile.string())) {
         SetError(outError, "failed to read project file: " + lumaFile.string());
         return std::nullopt;
     }
 
-    Project project;
-    project.m_projectFile = fs::absolute(lumaFile, ec);
-    project.m_name = config.GetString("Project.name",
-                                      lumaFile.stem().string());
+    project.m_name = config.GetString("Project.name", nameFallback);
     project.m_engineVersion = config.GetString("Project.engine_version", "0.0.0");
     project.m_template = GameTemplateFromString(
         config.GetString("Project.template", "Empty"));

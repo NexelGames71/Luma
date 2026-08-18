@@ -10,6 +10,7 @@
 
 #include "Luma/Asset/AssetData.h"
 #include "Luma/Asset/AssetId.h"
+#include "Luma/Asset/AssetMetadata.h"
 
 // In-memory index of every asset under one or more content roots. Owns no
 // asset contents, just the descriptors the editor uses to populate the
@@ -91,6 +92,12 @@ public:
     // Used when a folder is deleted / moved.
     void RemoveUnder(const std::filesystem::path& dir);
 
+    // Get metadata for an asset (returns nullptr if not present)
+    const AssetMetadata* GetMetadata(const AssetId& id) const noexcept;
+    
+    // Save metadata for an asset
+    void SaveMetadata(const AssetId& id, const AssetMetadata& metadata);
+
     // Sets the salt used in AssetId derivation. Defaults to "luma". Changing
     // it invalidates all ids; useful for content migrations.
     void SetSalt(std::string s) { m_salt = std::move(s); }
@@ -101,6 +108,7 @@ private:
     std::vector<std::filesystem::path> m_roots;
     std::unordered_map<AssetId, AssetData> m_byId;
     std::unordered_map<std::string, AssetId> m_byPath;  // path.string() -> id
+    std::unordered_map<AssetId, AssetMetadata> m_metadata;  // Asset metadata storage
     mutable std::mutex m_mutex;
 
     AssetId MakeId(const std::filesystem::path& p) const;

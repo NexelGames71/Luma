@@ -34,15 +34,16 @@ std::string_view AssetTypeIconHint(AssetType t) noexcept;  // enum name from Ico
 // The set of extensions the registry will index for each type. Editable
 // here so adding `.ktx2` or `.glb` is a one-line change.
 struct TypeExtensions {
-    std::array<std::string_view, 8> texture{"png",  "jpg",  "jpeg", "tga",
-                                            "bmp",  "webp", "ktx",  "ktx2"};
-    std::array<std::string_view, 4> mesh{"obj", "gltf", "glb", "fbx"};
-    std::array<std::string_view, 2> material{"mat", "lumat"};
-    std::array<std::string_view, 4> shader{"hlsl", "glsl", "frag", "vert"};
+    std::array<std::string_view, 9> texture{"png",  "jpg",  "jpeg", "tga",
+                                            "bmp",  "webp", "ktx",  "ktx2",
+                                            "ltex"};
+    std::array<std::string_view, 5> mesh{"obj", "gltf", "glb", "fbx", "lmesh"};
+    std::array<std::string_view, 3> material{"mat", "lumat", "lmat"};
+    std::array<std::string_view, 5> shader{"hlsl", "glsl", "frag", "vert", "lshader"};
     std::array<std::string_view, 4> script{"lua", "py", "js", "cs"};
-    std::array<std::string_view, 2> prefab{"prefab", "lumapfb"};
-    std::array<std::string_view, 2> scene{"luma", "scene"};
-    std::array<std::string_view, 4> sound{"wav", "ogg", "mp3", "flac"};
+    std::array<std::string_view, 3> prefab{"prefab", "lumapfb", "lasset"};
+    std::array<std::string_view, 3> scene{"luma", "scene", "lumascene"};
+    std::array<std::string_view, 5> sound{"wav", "ogg", "mp3", "flac", "laudio"};
     std::array<std::string_view, 2> font{"ttf", "otf"};
 };
 

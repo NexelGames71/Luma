@@ -2,6 +2,7 @@
 
 #include <limits>
 #include <vector>
+#include <memory>
 
 #include "Luma/Platform/Window.h"
 #include "Luma/RHI/VulkanRenderer.h"
@@ -71,6 +72,20 @@ VulkanRenderer::VulkanRenderer(Window& window, const RendererConfig& config)
         m_device->Physical(), m_device->Logical(), m_commandPool,
         m_device->GraphicsQueue(), m_swapchain->Format(), kFramesInFlight,
         LUMA_SHADER_DIR);
+
+    // Vulkan deferred renderer for the editor viewport. It renders into an
+    // offscreen G-Buffer + light-accumulation image that is registered with
+    // the UI pass so the viewport panel can display it.
+    m_vulkanDeferredRenderer = std::make_unique<Rendering::VulkanDeferredRenderer>(
+        m_device->Physical(), m_device->Logical(), m_device->GraphicsQueue(),
+        m_device->Queues().graphics.value(), *m_uiPass, LUMA_SHADER_DIR);
+
+    if (!m_vulkanDeferredRenderer->Initialize(1920, 1080)) {
+        LUMA_LOG_ERROR("Vulkan", "Failed to initialize Vulkan deferred renderer");
+        m_vulkanDeferredRenderer.reset();
+    } else {
+        LUMA_LOG_INFO("Vulkan", "Vulkan deferred renderer initialized");
+    }
 #endif
 
     LUMA_LOG_INFO("Vulkan", "renderer ready");
@@ -82,6 +97,10 @@ VulkanRenderer::~VulkanRenderer() {
 
     m_sceneView.reset();  // uses the device + UI pass; destroy first
     m_uiPass.reset();     // uses the device; destroy before it
+    
+    // Destroy Vulkan deferred renderer before device
+    m_vulkanDeferredRenderer.reset();
+    
     DestroyRenderFinishedSemaphores();
     for (auto& sem : m_imageAvailable) {
         if (sem) vkDestroySemaphore(device, sem, nullptr);
@@ -245,6 +264,16 @@ TextureHandle VulkanRenderer::CreateTexture(u32 width, u32 height,
 
 void VulkanRenderer::DestroyTexture(TextureHandle texture) {
     if (m_uiPass) m_uiPass->DestroyTexture(texture);
+}
+
+TextureHandle VulkanRenderer::RegisterExternalTexture(void* imageView) {
+    VkImageView view = static_cast<VkImageView>(imageView);
+    return m_uiPass ? m_uiPass->RegisterExternalTexture(view) : 0;
+}
+
+void VulkanRenderer::UpdateExternalTexture(TextureHandle handle, void* imageView) {
+    VkImageView view = static_cast<VkImageView>(imageView);
+    if (m_uiPass) m_uiPass->UpdateExternalTexture(handle, view);
 }
 
 void VulkanRenderer::EndFrame() {

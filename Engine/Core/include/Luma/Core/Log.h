@@ -57,6 +57,7 @@ void Shutdown();
 void AddSink(std::shared_ptr<ILogSink> sink);
 void SetLevel(LogLevel level);
 LogLevel GetLevel();
+void Flush();
 
 // Built-in sinks.
 std::shared_ptr<ILogSink> MakeConsoleSink();

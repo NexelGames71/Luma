@@ -8,9 +8,6 @@
 layout(push_constant) uniform SkyPush {
     mat4 invViewProj;
     vec4 cameraPos;  // xyz = world camera position
-    vec4 sunDir;     // xyz = dir TO sun (normalized), w = below-horizon fade
-    vec4 params;     // x=turbidity, y=sunIntensity, z=cosSunRadius, w=skyIntensity
-    vec4 ground;     // rgb = color below horizon
 } pc;
 
 layout(location = 0) out vec4 vWorldHomog;

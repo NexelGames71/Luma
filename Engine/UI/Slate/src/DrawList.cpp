@@ -23,7 +23,20 @@ Rect DrawList::CurrentClip() const {
     return Rect{0.0f, 0.0f, m_displayWidth, m_displayHeight};
 }
 
-void DrawList::PushClip(Rect clip) { m_clipStack.push_back(clip); }
+void DrawList::PushClip(Rect clip) {
+    // Nested clips intersect with the enclosing clip so a child region can
+    // never extend past its parent (which would let content escape a panel).
+    if (!m_clipStack.empty()) {
+        const Rect& parent = m_clipStack.back();
+        f32 x0 = std::max(clip.x, parent.x);
+        f32 y0 = std::max(clip.y, parent.y);
+        f32 x1 = std::min(clip.Right(), parent.Right());
+        f32 y1 = std::min(clip.Bottom(), parent.Bottom());
+        clip = Rect{x0, y0, std::max(0.0f, x1 - x0),
+                    std::max(0.0f, y1 - y0)};
+    }
+    m_clipStack.push_back(clip);
+}
 void DrawList::PopClip() {
     if (!m_clipStack.empty()) m_clipStack.pop_back();
 }
@@ -124,6 +137,21 @@ void DrawList::AddRectFilledGradient(const Rect& rect, Color top,
     m_vertices.push_back({rect.Right(), rect.y, 1.0f, 0.0f, t});
     m_vertices.push_back({rect.Right(), rect.Bottom(), 1.0f, 1.0f, b});
     m_vertices.push_back({rect.x, rect.Bottom(), 0.0f, 1.0f, b});
+    u32 quad[6] = {base, base + 1, base + 2, base + 2, base + 3, base};
+    for (u32 i : quad) m_indices.push_back(i);
+    m_commands.back().indexCount += 6;
+}
+
+void DrawList::AddRectFilledGradientH(const Rect& rect, Color left,
+                                      Color right) {
+    EnsureCommand(0);
+    u32 base = static_cast<u32>(m_vertices.size());
+    u32 l = left.Packed();
+    u32 r = right.Packed();
+    m_vertices.push_back({rect.x, rect.y, 0.0f, 0.0f, l});
+    m_vertices.push_back({rect.Right(), rect.y, 1.0f, 0.0f, r});
+    m_vertices.push_back({rect.Right(), rect.Bottom(), 1.0f, 1.0f, r});
+    m_vertices.push_back({rect.x, rect.Bottom(), 0.0f, 1.0f, l});
     u32 quad[6] = {base, base + 1, base + 2, base + 2, base + 3, base};
     for (u32 i : quad) m_indices.push_back(i);
     m_commands.back().indexCount += 6;

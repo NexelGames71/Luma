@@ -5,19 +5,23 @@
 #include "Luma/Math/Math.h"
 #include "Luma/RHI/Renderer.h"
 #include "Vulkan/VulkanCommon.h"
+#include "Vulkan/VulkanMemory.h"
 
 namespace Luma {
 
-// Renders the procedural (Preetham) sky as a fullscreen background inside the
-// scene view's dynamic-rendering pass. Self-contained: owns its own pipeline
-// layout + pipeline and the sky.vert/sky.frag shaders. The scene renderer just
+// Renders the procedural (physically based single-scattering) sky as a
+// fullscreen background inside the scene view's dynamic-rendering pass.
+// Self-contained: owns its own pipeline layout + pipeline, a params UBO +
+// descriptor set, and the sky.vert/sky.frag shaders. The scene renderer just
 // hands it the camera matrices and the SkyParams it received via the RHI, so the
-// generic geometry passes stay unaware of "sky".
+// generic geometry passes stay unaware of "sky". The atmosphere shader module
+// (sky_atmosphere.glsl) is shared with the deferred lighting pass so both
+// paths produce the same sky.
 class VulkanSkyPass {
 public:
-    VulkanSkyPass(VkDevice device, const std::string& shaderDir,
-                  VkSampleCountFlagBits samples, VkFormat colorFormat,
-                  VkFormat depthFormat);
+    VulkanSkyPass(VkPhysicalDevice physical, VkDevice device,
+                  const std::string& shaderDir, VkSampleCountFlagBits samples,
+                  VkFormat colorFormat, VkFormat depthFormat);
     ~VulkanSkyPass();
 
     VulkanSkyPass(const VulkanSkyPass&) = delete;
@@ -34,6 +38,10 @@ private:
     VkDevice m_device;
     VkPipelineLayout m_layout = VK_NULL_HANDLE;
     VkPipeline m_pipeline = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_setLayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_pool = VK_NULL_HANDLE;
+    VkDescriptorSet m_set = VK_NULL_HANDLE;
+    GpuBuffer m_ubo;
 };
 
 }  // namespace Luma

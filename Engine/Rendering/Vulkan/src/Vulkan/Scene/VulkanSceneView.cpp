@@ -107,8 +107,9 @@ VulkanSceneView::VulkanSceneView(VkPhysicalDevice physical, VkDevice device,
     m_overlayPipeline = CreateLinePipeline(shaderDir, /*depthTest=*/false);
     m_shadowPipeline = CreateShadowPipeline(shaderDir);
 
-    m_skyPass = std::make_unique<VulkanSkyPass>(device, shaderDir, m_samples,
-                                                kColorFormat, kDepthFormat);
+    m_skyPass = std::make_unique<VulkanSkyPass>(m_physical, device, shaderDir,
+                                                m_samples, kColorFormat,
+                                                kDepthFormat);
     m_gridPass = std::make_unique<VulkanGridPass>(
         physical, device, shaderDir, m_samples, kColorFormat, kDepthFormat);
 }
@@ -116,6 +117,7 @@ VulkanSceneView::VulkanSceneView(VkPhysicalDevice physical, VkDevice device,
 VulkanSceneView::~VulkanSceneView() {
     vkDeviceWaitIdle(m_device);
     DestroyTargets();
+    CleanupCustomMeshes();
     for (Primitive& p : m_primitives) {
         DestroyBuffer(m_device, p.vertexBuffer);
         DestroyBuffer(m_device, p.indexBuffer);
@@ -174,6 +176,74 @@ void VulkanSceneView::CreatePrimitives() {
                     static_cast<usize>(isize));
         m_primitives[i].indexCount = static_cast<u32>(data.indices.size());
     }
+}
+
+const VulkanSceneView::CustomMesh* VulkanSceneView::GetOrCreateCustomMesh(
+    const Math::Vec3* vertices, u32 vertexCount,
+    const u32* indices, u32 indexCount) {
+    
+    if (!vertices || vertexCount == 0) {
+        return nullptr;
+    }
+    
+    // Check if mesh already exists
+    auto it = m_customMeshes.find(vertices);
+    if (it != m_customMeshes.end() && it->second.valid) {
+        return &it->second;
+    }
+    
+    // Create new custom mesh
+    CustomMesh mesh;
+    mesh.vertexCount = vertexCount;
+    mesh.indexCount = indexCount;
+    
+    // Convert Vec3 positions to MeshVertex format
+    std::vector<MeshVertex> meshVertices;
+    meshVertices.reserve(vertexCount);
+    for (u32 i = 0; i < vertexCount; ++i) {
+        MeshVertex v;
+        v.position = vertices[i];
+        v.normal = Math::Vec3(0.0f, 0.0f, 1.0f);  // Default normal
+        meshVertices.push_back(v);
+    }
+    
+    // Create vertex buffer
+    VkDeviceSize vsize = sizeof(MeshVertex) * meshVertices.size();
+    mesh.vertexBuffer = CreateBuffer(m_physical, m_device, vsize,
+                                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                     true);
+    std::memcpy(mesh.vertexBuffer.mapped, meshVertices.data(),
+                static_cast<usize>(vsize));
+    
+    // Create index buffer
+    if (indices && indexCount > 0) {
+        VkDeviceSize isize = sizeof(u32) * indexCount;
+        mesh.indexBuffer = CreateBuffer(m_physical, m_device, isize,
+                                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                        true);
+        std::memcpy(mesh.indexBuffer.mapped, indices,
+                    static_cast<usize>(isize));
+    }
+    
+    mesh.valid = true;
+    m_customMeshes[vertices] = std::move(mesh);
+    
+    return &m_customMeshes[vertices];
+}
+
+void VulkanSceneView::CleanupCustomMeshes() {
+    for (auto& pair : m_customMeshes) {
+        CustomMesh& mesh = pair.second;
+        if (mesh.valid) {
+            DestroyBuffer(m_device, mesh.vertexBuffer);
+            DestroyBuffer(m_device, mesh.indexBuffer);
+        }
+    }
+    m_customMeshes.clear();
 }
 
 void VulkanSceneView::CreateShadowResources() {
@@ -813,6 +883,8 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
     ubo.camForward[2] = camFwd.z;
     ubo.shadowParams[0] = scene.lighting.shadowSoftness;
     ubo.shadowParams[1] = static_cast<f32>(kCascades);
+    ubo.shadowParams[2] = scene.lighting.shadowBias;
+    ubo.shadowParams[3] = scene.lighting.normalBias;
     ubo.viewProj = viewProj;
     ubo.camPos[0] = invView.m[12];
     ubo.camPos[1] = invView.m[13];
@@ -927,18 +999,46 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
             VkDeviceSize soff = 0;
             for (u32 i = 0; i < scene.instanceCount; ++i) {
                 const SceneInstance& inst = scene.instances[i];
-                u32 prim = static_cast<u32>(inst.primitive);
-                if (prim >= kPrimitiveCount) prim = 0;
-                const Primitive& mesh = m_primitives[prim];
-                Math::Mat4 mvp = cascadeVP[c] * inst.model;
-                vkCmdPushConstants(m_cmd, m_shadowLayout,
-                                   VK_SHADER_STAGE_VERTEX_BIT, 0,
-                                   sizeof(Math::Mat4), &mvp);
-                vkCmdBindVertexBuffers(m_cmd, 0, 1, &mesh.vertexBuffer.buffer,
-                                       &soff);
-                vkCmdBindIndexBuffer(m_cmd, mesh.indexBuffer.buffer, 0,
-                                     VK_INDEX_TYPE_UINT32);
-                vkCmdDrawIndexed(m_cmd, mesh.indexCount, 1, 0, 0, 0);
+                
+                // Check if using custom mesh
+                const CustomMesh* customMesh = nullptr;
+                if (inst.customMeshValid && inst.customVertices) {
+                    customMesh = GetOrCreateCustomMesh(inst.customVertices,
+                                                       inst.customVertexCount,
+                                                       inst.customIndices,
+                                                       inst.customIndexCount);
+                }
+                
+                if (customMesh && customMesh->valid) {
+                    // Use custom mesh
+                    Math::Mat4 mvp = cascadeVP[c] * inst.model;
+                    vkCmdPushConstants(m_cmd, m_shadowLayout,
+                                       VK_SHADER_STAGE_VERTEX_BIT, 0,
+                                       sizeof(Math::Mat4), &mvp);
+                    vkCmdBindVertexBuffers(m_cmd, 0, 1, &customMesh->vertexBuffer.buffer,
+                                           &soff);
+                    if (customMesh->indexCount > 0) {
+                        vkCmdBindIndexBuffer(m_cmd, customMesh->indexBuffer.buffer, 0,
+                                             VK_INDEX_TYPE_UINT32);
+                        vkCmdDrawIndexed(m_cmd, customMesh->indexCount, 1, 0, 0, 0);
+                    } else {
+                        vkCmdDraw(m_cmd, customMesh->vertexCount, 1, 0, 0);
+                    }
+                } else {
+                    // Use primitive
+                    u32 prim = static_cast<u32>(inst.primitive);
+                    if (prim >= kPrimitiveCount) prim = 0;
+                    const Primitive& mesh = m_primitives[prim];
+                    Math::Mat4 mvp = cascadeVP[c] * inst.model;
+                    vkCmdPushConstants(m_cmd, m_shadowLayout,
+                                       VK_SHADER_STAGE_VERTEX_BIT, 0,
+                                       sizeof(Math::Mat4), &mvp);
+                    vkCmdBindVertexBuffers(m_cmd, 0, 1, &mesh.vertexBuffer.buffer,
+                                           &soff);
+                    vkCmdBindIndexBuffer(m_cmd, mesh.indexBuffer.buffer, 0,
+                                         VK_INDEX_TYPE_UINT32);
+                    vkCmdDrawIndexed(m_cmd, mesh.indexCount, 1, 0, 0, 0);
+                }
             }
         }
         vkCmdEndRendering(m_cmd);
@@ -1016,10 +1116,16 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
                             0, 1, &m_uboSet, 0, nullptr);
     for (u32 i = 0; i < scene.instanceCount; ++i) {
         const SceneInstance& inst = scene.instances[i];
-        u32 prim = static_cast<u32>(inst.primitive);
-        if (prim >= kPrimitiveCount) prim = 0;
-        const Primitive& mesh = m_primitives[prim];
-
+        
+        // Check if using custom mesh
+        const CustomMesh* customMesh = nullptr;
+        if (inst.customMeshValid && inst.customVertices) {
+            customMesh = GetOrCreateCustomMesh(inst.customVertices,
+                                               inst.customVertexCount,
+                                               inst.customIndices,
+                                               inst.customIndexCount);
+        }
+        
         MeshPush push{};
         push.model = inst.model;
         push.albedo[0] = inst.albedo.x;
@@ -1031,10 +1137,27 @@ TextureHandle VulkanSceneView::Render(u32 width, u32 height,
                            VK_SHADER_STAGE_VERTEX_BIT |
                                VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(MeshPush), &push);
-        vkCmdBindVertexBuffers(m_cmd, 0, 1, &mesh.vertexBuffer.buffer, &offset);
-        vkCmdBindIndexBuffer(m_cmd, mesh.indexBuffer.buffer, 0,
-                             VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(m_cmd, mesh.indexCount, 1, 0, 0, 0);
+        
+        if (customMesh && customMesh->valid) {
+            // Use custom mesh
+            vkCmdBindVertexBuffers(m_cmd, 0, 1, &customMesh->vertexBuffer.buffer, &offset);
+            if (customMesh->indexCount > 0) {
+                vkCmdBindIndexBuffer(m_cmd, customMesh->indexBuffer.buffer, 0,
+                                     VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(m_cmd, customMesh->indexCount, 1, 0, 0, 0);
+            } else {
+                vkCmdDraw(m_cmd, customMesh->vertexCount, 1, 0, 0);
+            }
+        } else {
+            // Use primitive
+            u32 prim = static_cast<u32>(inst.primitive);
+            if (prim >= kPrimitiveCount) prim = 0;
+            const Primitive& mesh = m_primitives[prim];
+            vkCmdBindVertexBuffers(m_cmd, 0, 1, &mesh.vertexBuffer.buffer, &offset);
+            vkCmdBindIndexBuffer(m_cmd, mesh.indexBuffer.buffer, 0,
+                                 VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(m_cmd, mesh.indexCount, 1, 0, 0, 0);
+        }
     }
 
     // Overlay lines (gizmo), drawn on top without depth.

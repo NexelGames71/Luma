@@ -5,6 +5,7 @@
 #include <chrono>
 #include <system_error>
 
+#include "Luma/Asset/AssetMetadata.h"
 #include "Luma/Core/Log.h"
 
 namespace Luma {
@@ -228,7 +229,10 @@ std::vector<const AssetData*> AssetRegistry::Filter(
         if (hasDir) {
             auto rel = data.packagePath.lexically_relative(normDir);
             auto relStr = rel.string();
+            // Skip the directory itself and anything not directly under it
             if (relStr.empty() || relStr.front() == '.') continue;
+            // Skip assets in subdirectories (path contains separator)
+            if (relStr.find('/') != std::string::npos || relStr.find('\\') != std::string::npos) continue;
         }
         if (!needle.empty()) {
             std::string hay = data.assetName;
@@ -304,20 +308,34 @@ std::string AssetRegistry::DisplayPathFor(
         return s;
     };
     // Walk every root; the first one that contains `norm` wins. Strip the
-    // root and prefix the result with "Content/" (since the registry roots
-    // are conventionally the project's Content/ directory).
+    // root and prefix the result with "Assets/" (the registry roots are
+    // conventionally the project's Assets/ directory at the project root).
     for (const auto& root : m_roots) {
         auto r = Normalize(root);
-        if (norm == r) return "Content/";
+        if (norm == r) return "Assets/";
         auto rel = norm.lexically_relative(r);
         auto relStr = normalizeSeparators(rel.string());
         if (relStr.empty() || relStr.front() == '.' ||
             relStr.find("..") != std::string::npos) {
             continue;
         }
-        return "Content/" + relStr;
+        return "Assets/" + relStr;
     }
     return normalizeSeparators(norm.string());
+}
+
+const AssetMetadata* AssetRegistry::GetMetadata(const AssetId& id) const noexcept {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto it = m_metadata.find(id);
+    if (it != m_metadata.end()) {
+        return &it->second;
+    }
+    return nullptr;
+}
+
+void AssetRegistry::SaveMetadata(const AssetId& id, const AssetMetadata& metadata) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_metadata[id] = metadata;
 }
 
 }  // namespace Luma

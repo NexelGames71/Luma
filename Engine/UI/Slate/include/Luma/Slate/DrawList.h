@@ -25,6 +25,11 @@ public:
     void AddRectFilled(const Rect& rect, Color color);
     void AddRectFilledRounded(const Rect& rect, Color color, f32 radius);
     void AddRectFilledGradient(const Rect& rect, Color top, Color bottom);
+    // Horizontal variant of the above: interpolates left -> right. Used by
+    // the ColorPicker's saturation/value square (white -> hue), which then
+    // gets a transparent -> black vertical fade layered on top (the UI pass
+    // alpha-blends, so the two gradients compose into the S/V field).
+    void AddRectFilledGradientH(const Rect& rect, Color left, Color right);
     void AddRectOutline(const Rect& rect, Color color, f32 thickness = 1.0f);
     // Outline of a rounded rect (stroke centered on the perimeter). Used for
     // focus rings so they match the rounded field shape instead of cutting

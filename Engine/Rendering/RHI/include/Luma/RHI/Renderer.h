@@ -64,16 +64,27 @@ struct UIDrawData {
 enum class MeshPrimitive { Cube, Plane, Sphere, Cylinder };
 
 // One mesh instance: world transform, which primitive, and a PBR material.
+// For custom meshes, set customMeshData and customMeshValid = true.
 struct SceneInstance {
     Math::Mat4 model = Math::Mat4::Identity();
     MeshPrimitive primitive = MeshPrimitive::Cube;
     Math::Vec3 albedo{0.82f, 0.82f, 0.85f};  // base color (linear)
     f32 metallic = 0.0f;
     f32 roughness = 0.5f;
+    
+    // Custom mesh data (optional)
+    const Math::Vec3* customVertices = nullptr;
+    u32 customVertexCount = 0;
+    const u32* customIndices = nullptr;
+    u32 customIndexCount = 0;
+    bool customMeshValid = false;
 };
 
 // A punctual light fed to the scene shader. `type`: 0 = directional, 1 = point,
 // 2 = spot. Directional ignores position/range; point ignores cone angles.
+// A directional light is the scene's sun: the scene builder also copies its
+// direction/color/intensity + disk settings into LightingParams/SkyParams so
+// the sky atmosphere and cascaded shadows follow the same light.
 struct SceneLight {
     Math::Vec3 position{0.0f, 3.0f, 0.0f};
     u32 type = 1;
@@ -83,12 +94,28 @@ struct SceneLight {
     f32 intensity = 6.0f;
     f32 cosInner = 0.94f;  // spot cone (cos of inner half-angle)
     f32 cosOuter = 0.87f;  // spot cone (cos of outer half-angle)
+
+    // --- Sun disk (directional only; drives the sky sun disk) ---
+    f32 sunDiskSizeDeg = 1.5f;
+    f32 sunDiskIntensity = 1.0f;
+
+    // --- Per-light shadow settings ---
+    bool castShadows = true;
+    f32 shadowBias = 0.0015f;
+    f32 normalBias = 0.02f;
+    f32 shadowSoftness = 1.6f;
+    u32 shadowMapSize = 2048;
+    u32 cascadeCount = 4;
+    f32 shadowDistance = 80.0f;
+    f32 cascadeSplitLambda = 0.6f;
 };
 
 // Analytic lighting + image-based-lighting environment, fed per frame. The sun
 // comes from the Environment; the sky colors approximate the environment
 // irradiance/reflection used for IBL (diffuse + specular ambient).
 struct LightingParams {
+    // The sun is a directional light; the scene builder copies its settings
+    // here so every renderer (forward CSM, deferred lighting, sky) agrees.
     Math::Vec3 sunDirection{0.35f, 0.65f, 0.55f};  // world dir TO the sun
     Math::Vec3 sunColor{1.0f, 0.96f, 0.9f};
     f32 sunIntensity = 3.0f;
@@ -99,6 +126,10 @@ struct LightingParams {
     bool sunShadows = true;      // cast shadows from the sun (directional)
     f32 shadowDistance = 80.0f;  // max world distance the cascades cover
     f32 shadowSoftness = 1.6f;   // PCSS light size (bigger = softer penumbra)
+    f32 shadowBias = 0.0015f;    // depth bias (scaled by cascade distance)
+    f32 normalBias = 0.02f;      // normal-offset bias (shadow acne on slopes)
+    f32 cascadeSplitLambda = 0.6f;  // 0 = uniform splits, 1 = logarithmic
+    u32 cascadeCount = 4;        // frustum-split cascade count
 };
 
 // A world-space line-segment vertex (two per segment). Feature modules (grid,
@@ -109,16 +140,36 @@ struct LineVertex {
 };
 
 // Procedural sky parameters. Fed by the Environment feature (an Environment
-// entity's EnvironmentComponent); the backend renders an analytic Preetham sky
-// as a fullscreen background when `enabled`. The renderer stays feature-agnostic
-// — it consumes these numbers, it does not know about "environments".
+// entity's EnvironmentComponent); the backend renders a physically based
+// single-scattering atmosphere (Rayleigh + Mie + ozone) as a fullscreen
+// background when `enabled`. The renderer stays feature-agnostic — it consumes
+// these numbers, it does not know about "environments".
 struct SkyParams {
+    // --- Sun ---
     Math::Vec3 sunDirection{0.35f, 0.65f, 0.55f};  // world dir TO the sun
-    f32 turbidity = 2.6f;                          // atmospheric haze (1..10)
-    Math::Vec3 groundColor{0.11f, 0.12f, 0.14f};   // color below the horizon
-    f32 sunIntensity = 1.0f;                       // sun-disk brightness
-    f32 skyIntensity = 1.0f;                       // overall sky exposure
-    f32 sunSizeDegrees = 1.5f;                     // sun angular diameter
+    Math::Vec3 sunColor{1.0f, 0.96f, 0.9f};
+    f32 sunIntensity = 1.0f;        // lighting scale (sky radiance + IBL)
+    f32 sunDiskSizeDeg = 1.5f;      // sun angular diameter
+    f32 sunDiskIntensity = 1.0f;    // sun-disk brightness multiplier
+
+    // --- Atmosphere (physical single scattering) ---
+    Math::Vec3 rayleighScattering{5.8e-6f, 13.6e-6f, 33.1e-6f};  // per meter
+    f32 rayleighScaleHeight = 8000.0f;   // meters
+    f32 mieScattering = 3.996e-6f;       // per meter
+    f32 mieAbsorption = 4.4e-6f;         // per meter
+    f32 mieScaleHeight = 1200.0f;        // meters
+    f32 mieAnisotropy = 0.8f;            // Henyey-Greenstein phase g
+    f32 ozoneScale = 1.0f;               // ozone layer density multiplier
+
+    // --- Sky post-processing ---
+    f32 skyIntensity = 1.0f;             // overall sky brightness
+    f32 saturation = 1.25f;              // saturation boost
+    f32 exposure = 2.4f;                 // exposure multiplier
+    Math::Vec3 skyTint{1.0f, 1.0f, 1.0f};
+
+    // --- Ground ---
+    Math::Vec3 groundColor{0.11f, 0.12f, 0.14f};  // below the horizon
+
     bool enabled = false;
 };
 
@@ -202,8 +253,24 @@ public:
     virtual TextureHandle RenderSceneView(u32 width, u32 height,
                                           const SceneView& scene) = 0;
 
+    // Register an external Vulkan image view as a UI texture (for deferred renderer output)
+    virtual TextureHandle RegisterExternalTexture(void* imageView) { (void)imageView; return 0; }
+    virtual void UpdateExternalTexture(TextureHandle handle, void* imageView) { (void)handle; (void)imageView; }
+
     // Block until the device is idle (use before teardown).
     virtual void WaitIdle() = 0;
+    
+    // Get the RHI device (for advanced rendering integration)
+    virtual void* GetRhiDevice() const { return nullptr; }
+
+    // Opaque accessors returning the underlying VulkanInstance / VulkanDevice
+    // as void* so the abstract surface doesn't need Vulkan headers. Non-owning;
+    // returned pointers are only valid for the lifetime of the renderer.
+    virtual void* GetVulkanInstance() const { return nullptr; }
+    virtual void* GetVulkanDevice() const { return nullptr; }
+    
+    // Get the Vulkan deferred renderer (opaque pointer to keep Vulkan types confined)
+    virtual void* GetVulkanDeferredRenderer() const { return nullptr; }
 };
 
 }  // namespace Luma

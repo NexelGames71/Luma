@@ -1,0 +1,6 @@
+# Luma project descriptor
+[Project]
+name = TestProject
+engine_version = 0.1.0
+template = Empty
+startup_scene = Assets/Scenes/Main.lscene

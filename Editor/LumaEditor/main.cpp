@@ -12,13 +12,23 @@
 #include "Luma/Platform/Window.h"
 #include "Luma/RHI/Renderer.h"
 #include "Luma/RHI/VulkanRenderer.h"
+#include "Luma/RHI/VulkanRHIDevice.h"
+#include "Luma/Rendering/Vulkan/VulkanDeferredRenderer.h"
+#include "Luma/Renderer/DeferredShadingRenderer.h"
+#include "Luma/Renderer/Lighting.h"
 #include "Luma/Slate/Context.h"
 #include "Luma/Slate/Image.h"
 #include "Luma/VFS/Path.h"
 #include "Luma/VFS/VFS.h"
+#include "Luma/Asset/ThumbnailRenderer.h"
+#include "Luma/Asset/TextureThumbnailRenderer.h"
+#include "Luma/Asset/MeshThumbnailRenderer.h"
+#include "Luma/Asset/MaterialThumbnailRenderer.h"
 
 #include "EditorScreen.h"
 #include "SplashScreen.h"
+
+#include <vulkan/vulkan.h>
 
 using namespace Luma;
 
@@ -38,10 +48,16 @@ std::string FindEditorAsset(const std::string& file) {
 }
 
 // Feeds a window event into the Slate context (and reports window close).
-void FeedEvent(Slate::Context& ui, Event& e, bool& running) {
+void FeedEvent(Slate::Context& ui, Event& e, bool& running, EditorScreen* editor = nullptr) {
     EventDispatcher d(e);
     d.Dispatch<WindowCloseEvent>([&](WindowCloseEvent&) {
         running = false;
+        return true;
+    });
+    d.Dispatch<WindowDropEvent>([&](WindowDropEvent& drop) {
+        if (editor) {
+            editor->HandleDroppedFiles(drop.Paths());
+        }
         return true;
     });
     d.Dispatch<MouseMovedEvent>([&](MouseMovedEvent& m) {
@@ -75,9 +91,20 @@ void FeedEvent(Slate::Context& ui, Event& e, bool& running) {
 int main(int argc, char** argv) {
     Log::Init(LogLevel::Trace);
     Log::AddSink(Log::MakeConsoleSink());
+    
+    // Use absolute path for log file to avoid VFS remounting issues
     std::error_code logEc;
-    std::filesystem::create_directories("Saved/Logs", logEc);
-    Log::AddSink(Log::MakeFileSink("Saved/Logs/Editor.log"));
+    std::filesystem::path logDir = std::filesystem::absolute("Saved/Logs", logEc);
+    std::filesystem::create_directories(logDir, logEc);
+    std::filesystem::path logFile = logDir / "Editor.log";
+    Log::AddSink(Log::MakeFileSink(logFile.string()));
+    
+    // Test logging immediately
+    LUMA_LOG_INFO("Editor", "Logging system initialized");
+    LUMA_LOG_INFO("Editor", "Log file: {}", logFile.string());
+    
+    // Flush logs to ensure immediate write
+    Luma::Log::Flush();
 
     // Parse mode: --project <path.luma> opens the editor; otherwise the browser.
     std::filesystem::path projectFile;
@@ -104,9 +131,13 @@ int main(int argc, char** argv) {
             auto projectRoot = Luma::VFS::ProjectRootFromFile(projectFile);
             if (!projectRoot.empty()) {
                 vfs.Mount(Luma::VFS::Root::Project, projectRoot);
-                vfs.Mount(Luma::VFS::Root::Saved, projectRoot / "Saved");
+                // Scratch data (logs, screenshots, caches) lives in the
+                // project's Intermediate/ folder at the project root — both
+                // the legacy "Saved" and "Intermediate" roots resolve there.
+                vfs.Mount(Luma::VFS::Root::Saved,
+                          projectRoot / "Intermediate");
                 vfs.Mount(Luma::VFS::Root::Intermediate,
-                          projectRoot / "Saved" / "Intermediate");
+                          projectRoot / "Intermediate");
                 LUMA_LOG_INFO("Editor", "mounted project at {}",
                               projectRoot.string());
             }
@@ -124,29 +155,47 @@ int main(int argc, char** argv) {
     rc.vsync = true;
     std::unique_ptr<Renderer> renderer = CreateVulkanRenderer(*window, rc);
 
-    // Fonts: Inter (bundled) is the primary UI family. The four weights below
-    // map onto Slate's design roles:
+    // Initialize thumbnail system (after renderer is ready for GPU rendering)
+    {
+        auto& thumbnailMgr = Luma::ThumbnailManager::Get();
+        thumbnailMgr.Initialize();
+        
+        // Register thumbnail renderers
+        thumbnailMgr.RegisterRenderer(Luma::AssetType::Texture, 
+                                     std::make_unique<Luma::TextureThumbnailRenderer>());
+        
+        // Initialize mesh thumbnail renderer with RHI device for potential GPU rendering
+        auto meshRenderer = std::make_unique<Luma::MeshThumbnailRenderer>();
+        meshRenderer->Initialize(nullptr);  // CPU software rendering; GPU paths available later
+        thumbnailMgr.RegisterRenderer(Luma::AssetType::Mesh, std::move(meshRenderer));
+
+        // Material thumbnails: a studio-lit sphere shaded with the .lmat's
+        // constant fallbacks (base color / metallic / roughness / emissive).
+        thumbnailMgr.RegisterRenderer(Luma::AssetType::Material,
+                                     std::make_unique<Luma::MaterialThumbnailRenderer>());
+        
+        LUMA_LOG_INFO("Editor", "Thumbnail system initialized with {} renderers", 3);
+    }
+
+    // Fonts: Red Hat Display (variable font) is the primary UI family. The variable font
+    // supports multiple weights through a single file. We'll use the same variable font
+    // for all weights and let the renderer handle the weight variations.
     //   uiRegular -> body / default text
     //   uiMedium  -> captions / hint text / weaker emphasis
     //   uiSemiBold-> section headings, tab titles, button labels
     //   uiBold    -> titles, splash, large display
     //   mono      -> console output, logs, code
-    // If Inter can't be located, fall back to Segoe UI (regular/medium/semibold
-    // /bold) on Windows so the editor still boots. Consolas is the mono fallback.
+    // If Red Hat Display can't be located, fall back to Segoe UI on Windows.
     auto fontPathOr = [](const std::string& primary, const char* fallback) {
         return primary.empty() ? std::string(fallback) : primary;
     };
-    std::string bodyFont = fontPathOr(
-        FindEditorAsset("Fonts/Inter-Regular.ttf"), "C:/Windows/Fonts/segoeui.ttf");
-    std::string mediumFont = fontPathOr(
-        FindEditorAsset("Fonts/Inter-Medium.ttf"),
-        bodyFont.c_str());  // collapse: regular covers medium if missing
-    std::string uiFont = fontPathOr(
-        FindEditorAsset("Fonts/Inter-SemiBold.ttf"),
-        bodyFont.c_str());
-    std::string titleFont = fontPathOr(
-        FindEditorAsset("Fonts/Inter-Bold.ttf"),
-        "C:/Windows/Fonts/segoeui.ttf");
+
+    // Use Red Hat Display variable font for all weights
+    std::string redHatFont = "D:/Luma Engine/Red_Hat_Display/RedHatDisplay-VariableFont_wght.ttf";
+    std::string bodyFont = fontPathOr(redHatFont, "C:/Windows/Fonts/segoeui.ttf");
+    std::string mediumFont = fontPathOr(redHatFont, bodyFont.c_str());
+    std::string uiFont = fontPathOr(redHatFont, bodyFont.c_str());
+    std::string titleFont = fontPathOr(redHatFont, "C:/Windows/Fonts/segoeui.ttf");
     std::string monoFont =
         "C:/Windows/Fonts/consola.ttf";  // always present on Windows
 
@@ -159,12 +208,13 @@ int main(int argc, char** argv) {
     type.uiSemiBold = uiFont;
     type.uiBold = titleFont;
     type.mono = monoFont;
-    type.captionSize = 12.5f;
-    type.bodySize = 14.0f;
-    type.bodyStrongSize = 14.0f;
-    type.headingSize = 14.0f;
-    type.titleSize = 22.0f;
-    type.displaySize = 32.0f;
+    // Further increased font sizes for maximum quality and readability
+    type.captionSize = 15.0f;   // increased from 14.0f
+    type.bodySize = 18.0f;      // increased from 16.0f
+    type.bodyStrongSize = 18.0f; // increased from 16.0f
+    type.headingSize = 18.0f;   // increased from 16.0f
+    type.titleSize = 28.0f;     // increased from 26.0f
+    type.displaySize = 38.0f;   // increased from 36.0f
     if (!ui.Init(*renderer, type, window->ContentScale())) {
         LUMA_LOG_ERROR("Editor", "failed to load UI font");
     }
@@ -186,8 +236,9 @@ int main(int argc, char** argv) {
     }
 
     bool running = true;
+    std::unique_ptr<EditorScreen> editor;
     window->SetEventCallback(
-        [&](Event& e) { FeedEvent(ui, e, running); });
+        [&](Event& e) { FeedEvent(ui, e, running, editor.get()); });
 
     // Template thumbnails.
     ProjectBrowser browser;
@@ -228,16 +279,55 @@ int main(int argc, char** argv) {
     TextureHandle cbReload = loadIcon("Icons/reload.png");
     TextureHandle cbImport = loadIcon("Icons/import.png");
     TextureHandle cbOpenFolder = loadIcon("Icons/open-folder.png");
+    TextureHandle cbExpandArrow = loadIcon("Icons/SubmenuArrow.png");
+    TextureHandle cbRetractArrow = loadIcon("Icons/SortDownArrow.png");
 
-    std::unique_ptr<EditorScreen> editor;
+    // World Outliner icons (Create-menu + actor-row textures).
+    TextureHandle olCreateButton = loadIcon("Icons/Create-button.png");
+    TextureHandle olSearchGlass = loadIcon("Icons/SearchGlass.png");
+    TextureHandle olCatGeometry = loadIcon("Icons/geometry.png");
+    TextureHandle olCatLight = loadIcon("Icons/light.png");
+    TextureHandle olCatEnvironment = loadIcon("Icons/environment.png");
+    TextureHandle olActorCube = loadIcon("Icons/actor-cube.png");
+    TextureHandle olActorPlane = loadIcon("Icons/actor-plane.png");
+    TextureHandle olActorSphere = loadIcon("Icons/actor-sphere.png");
+    TextureHandle olActorCylinder = loadIcon("Icons/actor-cylinder.png");
+    TextureHandle olActorDirLight =
+        loadIcon("Icons/actor-light-directional.png");
+    TextureHandle olActorPointLight =
+        loadIcon("Icons/actor-light-point.png");
+    TextureHandle olActorSpotLight = loadIcon("Icons/actor-light-spot.png");
+    TextureHandle olActorMesh = loadIcon("Icons/actor-mesh.png");
+
     SplashScreen splash;
+
+    // Initialize Vulkan deferred renderer (editor mode only)
+    void* deferredRendererPtr = renderer->GetVulkanDeferredRenderer();
+    if (deferredRendererPtr) {
+        LUMA_LOG_INFO("Editor", "Vulkan deferred renderer available");
+    } else {
+        LUMA_LOG_WARN("Editor", "Vulkan deferred renderer not available");
+    }
+    Log::Flush();
     if (editorMode) {
         editor = std::make_unique<EditorScreen>(projectFile);
+        editor->SetRenderer(renderer.get());
         editor->SetToolbarIcons(iconPlay, iconPause, iconStop);
         editor->SetLogoIcon(iconLogo);
         editor->SetContentBrowserIcons(cbSortUp, cbSortDown, cbSearchGlass,
                                        cbFolder, cbReload, cbImport,
-                                       cbOpenFolder);
+                                       cbOpenFolder, cbExpandArrow,
+                                       cbRetractArrow);
+        // World Outliner icons: Create-menu header button + search glass +
+        // category rows + primitive rows + actor-row icons beside entity
+        // names. Zero handles fall back to procedural glyphs.
+        editor->SetCreateButtonIcon(olCreateButton);
+        editor->SetSearchGlassIcon(olSearchGlass);
+        editor->SetCategoryIcons(olCatGeometry, olCatLight, olCatEnvironment);
+        editor->SetPrimitiveIcons(olActorCube, olActorPlane, olActorSphere,
+                                  olActorCylinder);
+        editor->SetOutlinerActorIcons(olActorDirLight, olActorPointLight,
+                                      olActorSpotLight, olActorMesh);
     }
 
     // Splash phase (editor mode only).
@@ -261,10 +351,44 @@ int main(int argc, char** argv) {
         if (editorMode && editor && splashTime >= kSplashDuration) {
             Slate::Rect vp = editor->ViewportRect();
             if (vp.w > 4.0f && vp.h > 4.0f) {
-                SceneView scene = editor->BuildSceneView();
-                TextureHandle sceneTex = renderer->RenderSceneView(
-                    static_cast<u32>(vp.w), static_cast<u32>(vp.h), scene);
-                editor->SetViewportTexture(sceneTex);
+                // Use ONLY Vulkan deferred renderer for viewport
+                if (deferredRendererPtr) {
+                    auto* vulkanDeferredRenderer = static_cast<Rendering::VulkanDeferredRenderer*>(deferredRendererPtr);
+                    
+                    // Build scene view for Vulkan deferred renderer
+                    Renderer2::DeferredSceneView deferredScene = editor->BuildDeferredSceneView();
+                    deferredScene.width = static_cast<u32>(vp.w);
+                    deferredScene.height = static_cast<u32>(vp.h);
+                    deferredScene.projectionMatrix = Math::Perspective(
+                        deferredScene.fov,
+                        static_cast<f32>(vp.w) / static_cast<f32>(vp.h),
+                        deferredScene.nearPlane, deferredScene.farPlane);
+                    deferredScene.viewProjectionMatrix =
+                        deferredScene.projectionMatrix * deferredScene.viewMatrix;
+                    
+                    // Set viewport dimensions and render
+                    vulkanDeferredRenderer->SetViewportDimensions(static_cast<u32>(vp.w), static_cast<u32>(vp.h));
+                    vulkanDeferredRenderer->PrepareScene();
+                    vulkanDeferredRenderer->RenderScene(deferredScene);
+                    
+                    // The deferred renderer owns the UI texture handle for its
+                    // light-accumulation buffer (re-pointed internally on resize).
+                    TextureHandle sceneTex = vulkanDeferredRenderer->GetViewportTextureHandle();
+                    if (sceneTex != 0) {
+                        editor->SetViewportTexture(sceneTex);
+                    }
+                    
+                    // Log viewport render (only once per second to avoid spam)
+                    static u32 lastLogFrame = 0;
+                    if (frameCount - lastLogFrame > 60) {
+                        LUMA_LOG_DEBUG("Editor", "Viewport rendered {}x{} with Vulkan deferred renderer", 
+                                     static_cast<u32>(vp.w), static_cast<u32>(vp.h));
+                        lastLogFrame = frameCount;
+                        Log::Flush();
+                    }
+                } else {
+                    LUMA_LOG_ERROR("Editor", "Vulkan deferred renderer not available - viewport will be black");
+                }
             }
         }
 
@@ -306,6 +430,9 @@ int main(int argc, char** argv) {
             renderer->CaptureFrame(screenshotPath);
         }
         renderer->EndFrame();
+        
+        // Flush logs periodically to ensure they're written to disk
+        Luma::Log::Flush();
 
         if (!screenshotPath.empty() && frameCount >= kCaptureFrame) {
             running = false;  // captured; exit
@@ -317,6 +444,10 @@ int main(int argc, char** argv) {
     editor.reset();
     renderer.reset();
     window.reset();
+    
+    // Flush logs before shutdown
+    Log::Flush();
+    
     Log::Shutdown();
     return 0;
 }

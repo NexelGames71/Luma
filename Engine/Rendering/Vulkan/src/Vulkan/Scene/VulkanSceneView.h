@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 
 #include "Luma/RHI/Renderer.h"
 #include "Vulkan/Grid/VulkanGridPass.h"
@@ -28,6 +29,15 @@ public:
     TextureHandle Render(u32 width, u32 height, const SceneView& scene);
 
 private:
+    // Custom mesh support - defined before use
+    struct CustomMesh {
+        GpuBuffer vertexBuffer;
+        GpuBuffer indexBuffer;
+        u32 vertexCount = 0;
+        u32 indexCount = 0;
+        bool valid = false;
+    };
+    
     void CreateTargets(u32 width, u32 height);
     void DestroyTargets();
     void CreateLayouts();
@@ -38,6 +48,11 @@ private:
     VkPipeline CreateShadowPipeline(const std::string& shaderDir);
     void CreatePrimitives();
     void UploadLines(GpuBuffer& buffer, const LineVertex* lines, u32 count);
+    
+    // Custom mesh management
+    const CustomMesh* GetOrCreateCustomMesh(const Math::Vec3* vertices, u32 vertexCount,
+                                             const u32* indices, u32 indexCount);
+    void CleanupCustomMeshes();
 
     VkPhysicalDevice m_physical;
     VkDevice m_device;
@@ -64,6 +79,9 @@ private:
     };
     static constexpr u32 kPrimitiveCount = 4;
     Primitive m_primitives[kPrimitiveCount];
+    
+    // Map from vertex pointer to custom mesh (using the scene instance's pointer as key)
+    std::unordered_map<const Math::Vec3*, CustomMesh> m_customMeshes;
 
     // Line path (gizmo overlay): simple mvp+tint push, its own shader.
     VkPipelineLayout m_lineLayout = VK_NULL_HANDLE;

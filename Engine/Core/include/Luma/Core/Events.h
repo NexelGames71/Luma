@@ -1,11 +1,28 @@
 #pragma once
 
+#include <filesystem>
+#include <vector>
+
 #include "Luma/Core/Event.h"
 #include "Luma/Core/Types.h"
 
 // Concrete event types produced by the platform layer and consumed by layers.
 
 namespace Luma {
+
+class WindowDropEvent final : public Event {
+public:
+    explicit WindowDropEvent(std::vector<std::filesystem::path> paths)
+        : m_paths(std::move(paths)) {}
+
+    const std::vector<std::filesystem::path>& Paths() const { return m_paths; }
+
+    LUMA_EVENT_CLASS_TYPE(WindowDrop)
+    LUMA_EVENT_CLASS_CATEGORY(EventCategory_Window | EventCategory_Application)
+
+private:
+    std::vector<std::filesystem::path> m_paths;
+};
 
 class WindowCloseEvent final : public Event {
 public:

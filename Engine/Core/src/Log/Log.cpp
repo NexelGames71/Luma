@@ -141,6 +141,11 @@ void AddSink(std::shared_ptr<ILogSink> sink) {
 void SetLevel(LogLevel level) { g_level.store(level); }
 LogLevel GetLevel() { return g_level.load(); }
 
+void Flush() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for (auto& sink : g_sinks) sink->Flush();
+}
+
 std::shared_ptr<ILogSink> MakeConsoleSink() {
     return std::make_shared<ConsoleSink>();
 }

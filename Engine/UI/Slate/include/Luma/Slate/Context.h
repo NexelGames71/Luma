@@ -95,6 +95,10 @@ public:
     bool Button(u64 id, const Rect& rect, std::string_view label);
     // A flat menu-bar item: text only, with a rounded highlight on hover/press.
     bool MenuButton(u64 id, const Rect& rect, std::string_view label);
+    // Section header inside popup menus (Unreal-style): muted text with a
+    // hairline divider above. Not clickable, no hover state; the caller adds
+    // the vertical gap above the rect (see Theme::menu.sectionGap).
+    void MenuSectionHeader(const Rect& rect, std::string_view label);
     bool Tab(u64 id, const Rect& rect, std::string_view label, bool active);
     bool TextField(u64 id, const Rect& rect, std::string& text,
                    std::string_view placeholder = {});
@@ -107,8 +111,11 @@ public:
     bool IconButton(u64 id, const Rect& rect, TextureHandle icon);
     bool Checkbox(u64 id, const Rect& box, std::string_view label, bool& value);
     // A numeric field you scrub by dragging horizontally. Returns true if the
-    // value changed this frame.
-    bool DragFloat(u64 id, const Rect& rect, f32& value, f32 speed = 0.02f);
+    // value changed this frame. When `accent` is non-null, a small colored
+    // square (Unreal-style channel marker) is drawn at the field's left edge
+    // and the value reads left-aligned after it (no letter label).
+    bool DragFloat(u64 id, const Rect& rect, f32& value, f32 speed = 0.02f,
+                   const Color* accent = nullptr);
     // Three drag fields with colored X/Y/Z labels (edits xyz[0..2] in place).
     bool Vector3Field(u64 id, const Rect& rect, f32* xyz);
     // A collapsible section header; toggles `open` when clicked.
@@ -143,6 +150,15 @@ public:
     bool SearchBox(u64 id, const Rect& rect, std::string& text,
                    TextureHandle leadingIcon,
                    std::string_view placeholder = "Search...");
+    // Vertical scrollbar overlay for a content region. `viewport` is the
+    // visible area; `contentHeight` is the total content height in the same
+    // coordinate space. `scroll` is the current offset (px); the caller
+    // persists it and draws its content shifted up by the returned value.
+    // Returns the clamped offset — 0 when the content fits (and draws
+    // nothing). Wheel over the viewport scrolls, the thumb drags, clicking
+    // the track jumps. The bar fades in on hover, Unreal-style.
+    f32 VerticalScroll(u64 id, const Rect& viewport, f32 contentHeight,
+                       f32 scroll);
     // Modal popup menu. Returns the clicked item index, or -1 if dismissed.
     // Closes on selection or outside-click; backdrop dims the rest of the UI.
     struct MenuItem {
@@ -192,6 +208,8 @@ public:
     Font& uiFont() { return m_uiFont; }
     Font& mediumFont() { return m_mediumFont; }
     Font& monoFont() { return m_monoFont; }
+    // Small muted label font (menu section headers, captions).
+    Font& smallFont() { return m_smallFont; }
 
     // DPI scale the context was initialized with. Token sizes in widgets
     // multiply by this where crispness matters (icons, control heights,
@@ -205,6 +223,10 @@ public:
     Vec2 mouse() const { return m_mouse; }
     Vec2 mouseDelta() const { return m_mouseDelta; }
     f32 scrollDelta() const { return m_scroll; }
+    // Display size the context was sized with this frame (for widgets that
+    // need to clamp floating panels to the screen, e.g. ColorPickerPopup).
+    f32 displayWidth() const { return m_displayW; }
+    f32 displayHeight() const { return m_displayH; }
     bool isMouseDown(int button) const {
         return button >= 0 && button < 3 ? m_mouseDown[button] : false;
     }
@@ -219,17 +241,62 @@ public:
     bool mouseReleased(int button) const {
         return button >= 0 && button < 3 ? m_mouseReleased[button] : false;
     }
+    // True on the press of a second click of `button` within kDoubleClickTime
+    // (~0.35s) and a few pixels of the previous press. Edge-triggered, cleared
+    // every BeginFrame. Used by the Content Browser to activate (open) assets.
+    bool mouseDoubleClicked(int button) const {
+        return button >= 0 && button < 3 ? m_mouseDoubleClicked[button] : false;
+    }
+    // True on the frame the Enter key was pressed (edge-triggered, cleared
+    // every BeginFrame). Used by text-entry widgets to commit on Enter.
+    bool enterPressed() const { return m_keyEnter; }
+    // Edge-triggered navigation keys (cleared every BeginFrame). Up/Down move
+    // a popup menu's focus row; Left/Right traverse submenus; Home/End jump to
+    // the first/last row; Escape dismisses menus / clears search.
+    bool keyUp() const { return m_keyUp; }
+    bool keyDown() const { return m_keyDown; }
+    bool keyLeft() const { return m_keyLeft; }
+    bool keyRight() const { return m_keyRight; }
+    bool keyEscape() const { return m_keyEscape; }
+    bool keyHome() const { return m_keyHome; }
+    bool keyEnd() const { return m_keyEnd; }
+    // Edge-triggered Delete key (cleared every BeginFrame). Used by the
+    // Material Editor to remove the selected node.
+    bool keyDelete() const { return m_keyDelete; }
+    // True while a text field (TextField/SearchBox) owns keyboard focus —
+    // popup menus use this to leave caret keys (Left/Right/Home/End) to the
+    // field instead of hijacking them for navigation.
+    bool textFieldFocused() const { return m_focus != 0; }
+    // Programmatically gives a field keyboard focus (e.g. auto-focus a
+    // popup's search box when the menu opens). Caret starts at 0.
+    void FocusField(u64 id) {
+        m_focus = id;
+        m_caret = 0;
+    }
 
     // FNV-1a hash for stable widget ids from string literals.
     static u64 ID(std::string_view s);
 
 private:
+    // --- Text-field internals (shared by TextField + SearchBox) ----------
+    // Interaction + editing core (no chrome): hover cursor, click-to-focus,
+    // caret editing, Enter-commit. `hitRect` is the interactive region —
+    // TextField passes its full rect; SearchBox passes the whole bar so
+    // clicking the icon zone focuses too. Returns true if text changed.
+    bool EditText(u64 id, const Rect& hitRect, std::string& text);
+    // Rounded field chrome: hairline border, field bg, accent focus ring.
+    void DrawFieldChrome(const Rect& rect, bool focused);
+    // Text / placeholder / caret rendering clipped to `rect`.
+    void DrawFieldText(const Rect& rect, std::string_view text,
+                       std::string_view placeholder, bool focused);
+
     DrawList m_draw;
     Font m_font;
     Font m_titleFont;
     Font m_uiFont;
     Font m_mediumFont;
     Font m_monoFont;
+    Font m_smallFont;
     Theme m_theme = DarkTheme();
     f32 m_dpiScale = 1.0f;
 
@@ -239,16 +306,22 @@ private:
     bool m_mouseDown[3] = {};
     bool m_mousePressed[3] = {};
     bool m_mouseReleased[3] = {};
+    bool m_mouseDoubleClicked[3] = {};
+    f32 m_lastClickTime[3] = {};
+    Vec2 m_lastClickPos[3];
     f32 m_scroll = 0.0f;
+    static constexpr f32 kDoubleClickTime = 0.35f;
     std::string m_textInput;
     bool m_keyBackspace = false, m_keyDelete = false;
     bool m_keyLeft = false, m_keyRight = false;
     bool m_keyHome = false, m_keyEnd = false, m_keyEnter = false;
+    bool m_keyUp = false, m_keyDown = false, m_keyEscape = false;
 
     CursorShape m_requestedCursor = CursorShape::Arrow;
     u64 m_hot = 0;
     u64 m_active = 0;
     u64 m_focus = 0;
+    f32 m_dragGrab = 0.0f;  // thumb grab offset within the scrollbar thumb
     usize m_caret = 0;
     f32 m_time = 0.0f;
     f32 m_displayW = 0.0f;

@@ -7,6 +7,7 @@
 #include "Luma/RHI/Renderer.h"
 #include "Vulkan/Scene/VulkanSceneView.h"
 #include "Vulkan/UI/VulkanUIPass.h"
+#include "Luma/Rendering/Vulkan/VulkanDeferredRenderer.h"
 #include "Vulkan/VulkanCommon.h"
 #include "Vulkan/VulkanDevice.h"
 #include "Vulkan/VulkanInstance.h"
@@ -37,6 +38,22 @@ public:
     TextureHandle RenderSceneView(u32 width, u32 height,
                                   const SceneView& scene) override;
     void WaitIdle() override;
+    void* GetRhiDevice() const override { return m_device.get(); }
+    
+    // Register an external Vulkan image view as a UI texture (for deferred renderer output)
+    TextureHandle RegisterExternalTexture(void* imageView) override;
+    void UpdateExternalTexture(TextureHandle handle, void* imageView) override;
+
+    // Opaque borrowed accessors used to build the Luma::RHI::RHIDevice
+    // adapter. Returned pointers are owned by this VulkanRenderer and
+    // outlive any adapter constructed from them. The adapter's public
+    // header takes `void*` to keep <vulkan/vulkan.h> confined to
+    // Luma::RenderVulkan; see Luma/RHI/VulkanRHIDevice.h.
+    void* GetVulkanInstance() const { return m_instance.get(); }
+    void* GetVulkanDevice() const { return m_device.get(); }
+    
+    // Get the Vulkan-based deferred renderer (reference implementation)
+    void* GetVulkanDeferredRenderer() const override { return m_vulkanDeferredRenderer.get(); }
 
 private:
     static constexpr u32 kFramesInFlight = 2;
@@ -57,6 +74,7 @@ private:
     std::unique_ptr<VulkanSwapchain> m_swapchain;
     std::unique_ptr<VulkanUIPass> m_uiPass;
     std::unique_ptr<VulkanSceneView> m_sceneView;
+    std::unique_ptr<Rendering::VulkanDeferredRenderer> m_vulkanDeferredRenderer;
 
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     std::array<VkCommandBuffer, kFramesInFlight> m_commandBuffers{};

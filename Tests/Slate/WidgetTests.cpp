@@ -232,3 +232,66 @@ TEST_CASE("BeginModal returns content rect; EndModal clears state",
     ctx.EndModal();
     ctx.EndFrame();
 }
+
+TEST_CASE("Double-click fires on two rapid presses at the same spot",
+          "[slate][widget]") {
+    Context ctx;
+    NullRenderer r;
+    ctx.Init(r, TestTypography());
+    bool sawDbl = false;
+    // First press: no double-click yet.
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseMove(50.0f, 10.0f);
+    ctx.OnMouseButton(0, true);
+    sawDbl = ctx.mouseDoubleClicked(0);
+    ctx.EndFrame();
+    REQUIRE(sawDbl == false);
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseButton(0, false);
+    ctx.EndFrame();
+    // Second press within the time window at the same position.
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseMove(50.0f, 10.0f);
+    ctx.OnMouseButton(0, true);
+    sawDbl = ctx.mouseDoubleClicked(0);
+    ctx.EndFrame();
+    REQUIRE(sawDbl == true);
+    // Cleared next frame.
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseButton(0, false);
+    ctx.EndFrame();
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseMove(50.0f, 10.0f);
+    ctx.OnMouseButton(0, true);
+    sawDbl = ctx.mouseDoubleClicked(0);
+    ctx.EndFrame();
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseButton(0, false);
+    ctx.EndFrame();
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseButton(0, true);
+    sawDbl = ctx.mouseDoubleClicked(0);
+    ctx.EndFrame();
+    REQUIRE(sawDbl == true);
+}
+
+TEST_CASE("No double-click when presses are far apart", "[slate][widget]") {
+    Context ctx;
+    NullRenderer r;
+    ctx.Init(r, TestTypography());
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseMove(10.0f, 10.0f);
+    ctx.OnMouseButton(0, true);
+    ctx.EndFrame();
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseButton(0, false);
+    ctx.EndFrame();
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseMove(200.0f, 200.0f);  // far from the first press
+    ctx.OnMouseButton(0, true);
+    REQUIRE(ctx.mouseDoubleClicked(0) == false);
+    ctx.EndFrame();
+    ctx.BeginFrame(800, 600, 0.0166f);
+    ctx.OnMouseButton(0, false);
+    ctx.EndFrame();
+}

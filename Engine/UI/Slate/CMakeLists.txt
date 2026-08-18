@@ -8,7 +8,9 @@ add_library(LumaSlate STATIC
     src/Theme.cpp
     src/Icons.cpp
     src/Context.cpp
-    src/DockSpace.cpp)
+    src/DockSpace.cpp
+    src/ColorPicker.cpp
+    src/ColorPickerPopup.cpp)
 
 add_library(Luma::Slate ALIAS LumaSlate)
 

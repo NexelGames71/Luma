@@ -82,3 +82,7 @@ Modular subsystems behind clear interfaces; Vulkan kept isolated behind an RHI;
 production quality over demos; every subsystem tested; hot reload as a first-class
 dev feature; incremental, always-buildable milestones. Full brief in
 [docs/superpowers/specs](docs/superpowers/specs/).
+
+
+run command
+Content\Editor\Icons\environment.png

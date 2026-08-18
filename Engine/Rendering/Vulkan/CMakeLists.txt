@@ -2,6 +2,7 @@
 # All Vulkan types are confined to this module (Vulkan linked PRIVATE).
 
 add_library(LumaRenderVulkan STATIC
+    src/VulkanRHI.cpp
     src/Vulkan/VulkanCommon.cpp
     src/Vulkan/VulkanInstance.cpp
     src/Vulkan/VulkanDevice.cpp
@@ -13,7 +14,13 @@ add_library(LumaRenderVulkan STATIC
     src/Vulkan/Scene/VulkanSceneView.cpp
     src/Vulkan/Sky/VulkanSkyPass.cpp
     src/Vulkan/Grid/VulkanGridPass.cpp
-    src/Vulkan/VulkanRenderer.cpp)
+    src/Vulkan/VulkanRenderer.cpp
+    src/Vulkan/RHI/VulkanRHIResources.cpp
+    src/Vulkan/RHI/VulkanRHICommandList.cpp
+    src/Vulkan/RHI/VulkanRHIPipeline.cpp
+    src/Vulkan/RHI/VulkanRHIShader.cpp
+    src/Vulkan/RHI/VulkanRHIDevice.cpp
+    src/VulkanDeferredRenderer.cpp)
 
 add_library(Luma::RenderVulkan ALIAS LumaRenderVulkan)
 
@@ -28,13 +35,17 @@ endif()
 
 set(_luma_spv_outputs)
 foreach(shader ui.vert ui.frag scene.vert scene.frag sky.vert sky.frag
-               grid.vert grid.frag line.vert line.frag shadow.vert shadow.frag)
+               grid.vert grid.frag line.vert line.frag shadow.vert shadow.frag
+               gbuffer.vert gbuffer.frag
+               deferred_lighting.vert deferred_lighting.frag)
     add_custom_command(
         OUTPUT ${_luma_shader_out}/${shader}.spv
         COMMAND ${Vulkan_GLSLC_EXECUTABLE} --target-env=vulkan1.3
+                -I ${_luma_shader_src}
                 ${_luma_shader_src}/${shader}
                 -o ${_luma_shader_out}/${shader}.spv
         DEPENDS ${_luma_shader_src}/${shader}
+                ${_luma_shader_src}/sky_atmosphere.glsl
         COMMENT "glslc ${shader}"
         VERBATIM)
     list(APPEND _luma_spv_outputs ${_luma_shader_out}/${shader}.spv)
@@ -46,7 +57,8 @@ add_dependencies(LumaRenderVulkan LumaShaders)
 target_include_directories(LumaRenderVulkan
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-            ${PROJECT_SOURCE_DIR}/ThirdParty/stb)
+            ${PROJECT_SOURCE_DIR}/ThirdParty/stb
+            ${PROJECT_SOURCE_DIR}/Engine/Rendering/Renderer/include)
 
 target_link_libraries(LumaRenderVulkan
     PUBLIC Luma::Core Luma::RHI Luma::Platform
