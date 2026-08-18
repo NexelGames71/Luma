@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Luma/Project/Project.h"
+#include "Luma/RHI/Renderer.h"
 #include "Luma/Slate/Context.h"
 #include "Luma/Slate/Image.h"
 
@@ -28,6 +29,9 @@ public:
     // Optional banner logo (loaded by the app).
     void SetLogo(const Slate::Image& logo) { m_logo = logo; }
 
+    // Renderer used to load the cached last-view scene previews.
+    void SetRenderer(Renderer* renderer) { m_renderer = renderer; }
+
     // Template thumbnails, indexed by GameTemplate.
     void SetTemplateThumbnail(GameTemplate tmpl, const Slate::Image& image) {
         m_thumbnails[static_cast<usize>(tmpl)] = image;
@@ -47,6 +51,7 @@ private:
         std::string name;
         std::string templateName;
         std::filesystem::path file;
+        Slate::Image preview;
     };
 
     void CreateFromInputs(BrowserResult& result);
@@ -65,8 +70,10 @@ private:
 
     std::vector<ProjectEntry> m_projects;
     bool m_scanned = false;
+    f32 m_projectScroll = 0.0f;
 
     Slate::Image m_logo;
+    Renderer* m_renderer = nullptr;
     std::array<Slate::Image, 4> m_thumbnails;
 };
 

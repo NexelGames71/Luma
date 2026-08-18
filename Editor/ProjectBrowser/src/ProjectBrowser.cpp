@@ -46,8 +46,16 @@ void ProjectBrowser::Rescan() {
     for (const fs::path& file : DiscoverProjects(DefaultProjectsRoot())) {
         std::string err;
         if (auto project = Project::Load(file, &err)) {
+            Slate::Image preview;
+            if (m_renderer) {
+                const fs::path previewPath =
+                    project->IntermediateDir() / "Thumbnails" / "ScenePreview.png";
+                if (fs::exists(previewPath)) {
+                    preview = Slate::LoadImage(*m_renderer, previewPath.string());
+                }
+            }
             m_projects.push_back({project->Name(),
-                                  ToString(project->Template()), file});
+                                  ToString(project->Template()), file, preview});
         }
     }
     m_scanned = true;
@@ -208,10 +216,6 @@ void ProjectBrowser::DrawNewProject(Slate::Context& ui, const Rect& content,
 void ProjectBrowser::DrawYourProjects(Slate::Context& ui, const Rect& content,
                                       BrowserResult& result) {
     Slate::Theme& t = ui.theme();
-    f32 x = content.x + 16.0f;
-    f32 y = content.y + 16.0f;
-    f32 rowW = content.w - 32.0f;
-
     if (m_projects.empty()) {
         ui.LabelIn({content.x, content.y, content.w, content.h},
                    "No projects yet - create one in the New Project tab.",
@@ -219,22 +223,60 @@ void ProjectBrowser::DrawYourProjects(Slate::Context& ui, const Rect& content,
         return;
     }
 
-    for (const ProjectEntry& entry : m_projects) {
-        Rect row{x, y, rowW, 56};
-        bool hovered = row.Contains(ui.mouse());
-        ui.PanelRoundedBordered(row, hovered ? t.cardHover : t.cardBg,
-                                t.panelBorder, t.rounding);
-        ui.LabelIn({row.x + 16, row.y, rowW - 200, 56}, entry.name, t.text);
-        ui.LabelIn({row.x + 16, row.y + 26, rowW - 200, 26},
-                   entry.file.string(), t.textDim);
-        Rect openBtn{row.Right() - 110, row.y + 10, 96, 36};
+    const f32 gap = 18.0f;
+    const f32 minCardW = 220.0f;
+    const int columns = std::max(1, static_cast<int>(
+        (content.w + gap) / (minCardW + gap)));
+    const f32 cardW = (content.w - gap * static_cast<f32>(columns - 1)) /
+                      static_cast<f32>(columns);
+    const f32 cardH = 208.0f;
+    const f32 imageH = 132.0f;
+    const usize rowCount = (m_projects.size() + static_cast<usize>(columns) - 1) /
+                           static_cast<usize>(columns);
+    const f32 contentHeight = static_cast<f32>(rowCount) * (cardH + gap) - gap;
+    m_projectScroll = ui.VerticalScroll(Slate::Context::ID("project-grid"),
+                                         content, contentHeight,
+                                         m_projectScroll);
+    ui.PushClip(content);
+
+    for (usize i = 0; i < m_projects.size(); ++i) {
+        const ProjectEntry& entry = m_projects[i];
+        const int column = static_cast<int>(i % static_cast<usize>(columns));
+        const int row = static_cast<int>(i / static_cast<usize>(columns));
+        Rect card{content.x + column * (cardW + gap),
+                  content.y + row * (cardH + gap) - m_projectScroll, cardW,
+                  cardH};
+        const bool hovered = card.Contains(ui.mouse());
+        ui.PanelRoundedBordered(card, hovered ? t.cardHover : t.cardBg,
+                                hovered ? t.accentMuted : t.panelBorder,
+                                t.rounding);
+
+        Rect imageRect{card.x + 1.0f, card.y + 1.0f, card.w - 2.0f,
+                       imageH};
+        if (entry.preview.Valid()) {
+            ui.ImageUV(entry.preview.texture, imageRect,
+                       entry.preview.contentUV);
+        } else {
+            ui.Panel(imageRect, t.surface2);
+            ui.LogoMark({imageRect.x + imageRect.w * 0.5f,
+                         imageRect.y + imageRect.h * 0.5f}, 24.0f);
+            ui.LabelIn({imageRect.x, imageRect.Bottom() - 28.0f, imageRect.w,
+                        24.0f}, "No scene preview", t.textDim, Align::Center);
+        }
+
+        ui.LabelIn({card.x + 14.0f, card.y + imageH + 10.0f,
+                    card.w - 28.0f, 24.0f}, entry.name, t.text, Align::Left,
+                   true);
+        ui.LabelIn({card.x + 14.0f, card.y + imageH + 34.0f,
+                    card.w - 28.0f, 20.0f}, entry.templateName, t.textDim);
+        Rect openBtn{card.Right() - 86.0f, card.Bottom() - 38.0f, 72.0f, 28.0f};
         if (ui.Button(Slate::Context::ID(entry.file.string()), openBtn,
                       "Open")) {
             result.launch = true;
             result.projectFile = entry.file;
         }
-        y += 64.0f;
     }
+    ui.PopClip();
 }
 
 void ProjectBrowser::DrawAbout(Slate::Context& ui, const Rect& content) {

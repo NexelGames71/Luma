@@ -46,6 +46,10 @@ public:
 
     void Draw(Slate::Context& ui, f32 width, f32 height);
 
+    // Persists the latest rendered editor frame as the project-browser card
+    // preview. The renderer must still be alive when this is called.
+    void CaptureProjectPreview();
+
     Slate::Rect ViewportRect() const { return m_viewportPanel.Rect(); }
     void SetViewportTexture(TextureHandle texture) {
         m_viewportPanel.SetTexture(texture);

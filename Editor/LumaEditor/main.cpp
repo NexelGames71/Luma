@@ -243,6 +243,7 @@ int main(int argc, char** argv) {
     // Template thumbnails.
     ProjectBrowser browser;
     browser.SetLogo(logo);
+    browser.SetRenderer(renderer.get());
     struct TemplateAsset {
         GameTemplate value;
         const char* file;
@@ -425,6 +426,13 @@ int main(int argc, char** argv) {
 
         renderer->DrawUI(ui.EndFrame());
         window->SetCursor(ui.RequestedCursor());
+
+        // Capture the final editor frame while it is still the active
+        // swapchain frame. CaptureFrame is consumed by EndFrame, so this must
+        // happen before presenting rather than during shutdown.
+        if (editorMode && editor && !running && screenshotPath.empty()) {
+            editor->CaptureProjectPreview();
+        }
 
         if (!screenshotPath.empty() && frameCount == kCaptureFrame) {
             renderer->CaptureFrame(screenshotPath);

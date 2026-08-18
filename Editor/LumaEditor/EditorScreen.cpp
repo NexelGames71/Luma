@@ -148,6 +148,20 @@ void EditorScreen::SaveScene() {
     }
 }
 
+void EditorScreen::CaptureProjectPreview() {
+    if (!m_project || !m_renderer) return;
+    std::error_code ec;
+    const std::filesystem::path dir =
+        m_project->IntermediateDir() / "Thumbnails";
+    std::filesystem::create_directories(dir, ec);
+    if (ec) {
+        LUMA_LOG_WARN("Editor", "failed to create project preview directory: {}",
+                      ec.message());
+        return;
+    }
+    m_renderer->CaptureFrame((dir / "ScenePreview.png").string());
+}
+
 void EditorScreen::CreateActor(Editor::Panels::CreateActorKind kind) {
     int index = m_nextNumber++;
     const Math::Vec3 paletteColor = kEntityPalette[(index - 1) %
