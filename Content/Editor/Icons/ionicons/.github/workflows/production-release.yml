@@ -1,0 +1,28 @@
+name: 'Production Release'
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: false
+        type: string
+        description: npm version (major, minor, or patch)
+
+jobs:
+  release-ionicons:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.IONITRON_TOKEN }}
+      - name: Publish to NPM
+        uses: ./.github/workflows/actions/publish-npm
+        with:
+          tag: latest
+          version: ${{ inputs.version }}
+          working-directory: './'
+          createRelease: true
+          ghToken: ${{ secrets.IONITRON_TOKEN }}

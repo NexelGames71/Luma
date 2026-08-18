@@ -1,0 +1,63 @@
+name: 'Release'
+description: 'Releases a package'
+inputs:
+  version:
+    description: 'The type of version to release.'
+  tag:
+    description: 'The tag to publish to on NPM.'
+  working-directory:
+    description: 'The directory of the package.'
+  folder:
+    default: './'
+    description: 'A folder containing a package.json file.'
+  createRelease:
+    description: 'Create a release on GitHub.'
+    default: 'false'
+  ghToken:
+    description: 'The GitHub authentication token required to create a release.'
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+    - name: Install latest npm
+      run: npm install -g npm@latest
+      shell: bash
+    - name: Install Dependencies
+      run: npm ci
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+    - name: Set Git User
+      run: |
+        git config user.name ionitron
+        git config user.email hi@ionicframework.com
+      shell: bash
+    - name: Update Version
+      id: update_version
+      run: |
+        npm version ${{ inputs.version }}
+        echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+    - name: Run Build
+      run: npm run build
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+    - name: Publish to NPM
+      run: npm publish ${{ inputs.folder }} --tag ${{ inputs.tag }} --provenance
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Create Release
+      if: ${{ inputs.createRelease == 'true' }}
+      run: |
+        git remote set-url origin https://${GH_TOKEN}:x-oauth-basic@github.com/ionic-team/ionicons.git
+        git remote -v
+        git push origin main --tags
+        gh release create "v$VERSION" --title "v$VERSION" --generate-notes
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.ghToken }}
+        VERSION: ${{ env.VERSION }}
